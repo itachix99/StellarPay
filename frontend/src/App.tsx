@@ -8,6 +8,7 @@ import {
   Card,
 } from "./components/ui";
 import { ToastViewport } from "./components/ToastViewport";
+import { SorobanDashboard } from "./components/SorobanDashboard";
 import { useWallet } from "./hooks/useWallet";
 import { useEmployees, RosterError } from "./hooks/useEmployees";
 import { useToast } from "./hooks/useToast";
@@ -316,6 +317,12 @@ function App() {
                   </div>
                 )}
               </div>
+
+              {/* Soroban Smart Contract Section (Level 2) */}
+              <SorobanDashboard
+                userAddress={wallet.address}
+                network={wallet.network}
+              />
             </div>
           )}
         </main>
