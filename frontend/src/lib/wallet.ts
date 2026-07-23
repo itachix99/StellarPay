@@ -8,7 +8,7 @@ import {
   getNetwork,
   signTransaction,
 } from "@stellar/freighter-api";
-import { EXPECTED_NETWORK, NETWORK_PASSPHRASE } from "./config";
+import { EXPECTED_NETWORK, NETWORK_PASSPHRASE } from "../config";
 
 /** Thrown for every wallet failure so the UI can show a friendly message. */
 export class WalletError extends Error {}
