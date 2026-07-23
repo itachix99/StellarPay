@@ -17,23 +17,23 @@ StellarPay is a decentralized payroll distribution dApp built on Stellar Testnet
 
 ---
 
-## 🟢 Level 1: Core Wallet & Direct Payments (IN PROGRESS)
+## 🟢 Level 1: Core Wallet & Direct Payments (COMPLETED)
 
 ### Objectives
 1. **Wallet Integration**: Connect & disconnect Freighter wallet, check network (Stellar Testnet).
-2. **Balance Fetching**: Query and display connected wallet XLM balance via Horizon / RPC API.
-3. **Local Employee Roster**: In-memory / persistent local store for employee public keys, names, and assigned XLM salaries.
+2. **Balance Fetching**: Query and display connected wallet XLM balance via Horizon API.
+3. **Local Employee Roster**: Local store for employee public keys, names, and assigned XLM salaries.
 4. **Direct Salary Distribution**: Construct and submit Horizon XLM payment transactions from employer wallet to employee addresses.
 5. **Transaction Feedback**: Clear success/error toasts, status banners, transaction hash display, and link to Stellar Expert Testnet explorer.
 6. **Mobile Responsive UI**: Clean card-based responsive layout with loading spinners and full error handling.
 
 ### Level 1 Acceptance Criteria
-- [ ] Connect & disconnect Freighter wallet cleanly.
-- [ ] Display employer account address and XLM balance.
-- [ ] Add/remove employees in local manager UI.
-- [ ] Execute direct XLM salary payment to selected employee.
-- [ ] Robust error handling (rejected tx, wrong network, missing address, insufficient balance).
-- [ ] Verified via runtime test checklist & committed to Git as `level-1-complete`.
+- [x] Connect & disconnect Freighter wallet cleanly.
+- [x] Display employer account address and XLM balance.
+- [x] Add/remove employees in local manager UI.
+- [x] Send XLM salary directly to any employee.
+- [x] Robust error handling (rejected tx, wrong network, missing address, insufficient balance).
+- [x] Verified via runtime test checklist & committed to Git as `level-1-complete`.
 
 ---
 
