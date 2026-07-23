@@ -1,0 +1,65 @@
+name: StellarPay CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-contract:
+    name: Build & Test Soroban Smart Contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts/payroll -> target
+
+      - name: Run Soroban Contract Unit Tests
+        run: |
+          cd contracts/payroll
+          cargo test --verbose
+
+      - name: Build Contract WASM
+        run: |
+          cd contracts/payroll
+          cargo build --target wasm32v1-none --release
+
+  test-frontend:
+    name: Lint, Test & Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          bun install
+
+      - name: Run Frontend Linter
+        run: |
+          cd frontend
+          bun run lint
+
+      - name: Run Frontend Unit Tests
+        run: |
+          cd frontend
+          bun run test
+
+      - name: Build Production Frontend Bundle
+        run: |
+          cd frontend
+          bun run build
