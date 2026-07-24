@@ -64,7 +64,7 @@ async function simulateCall(
   return null;
 }
 
-async function runScheduler() {
+export async function runScheduler() {
   console.log("=== StellarPay Automated Payroll Scheduler ===");
   console.log(`Target Contract: ${CONTRACT_ID || "(missing)"}`);
   console.log(`RPC Endpoint:    ${SOROBAN_RPC_URL}`);
@@ -183,4 +183,7 @@ async function runScheduler() {
   }
 }
 
-runScheduler();
+if (import.meta.main) {
+  runScheduler();
+}
+

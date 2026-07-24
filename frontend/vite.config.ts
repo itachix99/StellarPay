@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     environment: 'jsdom',
+    setupFiles: ['./src/__tests__/setup.ts'],
     server: {
       deps: {
         inline: ['@stellar/freighter-api', '@creit-tech/stellar-wallets-kit', '@jsr/creit-tech__stellar-wallets-kit']

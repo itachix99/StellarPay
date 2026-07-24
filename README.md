@@ -6,19 +6,74 @@
 
 ---
 
-## Key Features
+## Level 1 — Wallet, Contracts, Transactions & Multi-Wallet
 
-- **Level 1 — Wallet & Direct Transfers**: Freighter integration, live XLM balance, local roster, direct XLM salary transfers.
-- **Level 2 — Soroban Payroll Smart Contract**: On-chain roster, admin RBAC, pinned token, pause/withdraw, cycle-safe bulk payroll, events.
-- **Level 3 — Automation & CI**: Dry-run scheduler, Rust + Vitest tests, GitHub Actions CI.
+### 1. Wallet Setup
+
+| Requirement | Implementation |
+|---|---|
+| Freighter wallet | `@stellar/freighter-api` v6.0.1 with `@creit-tech/stellar-wallets-kit` for multi-wallet support |
+| Stellar Testnet | Hardcoded via `Networks.TESTNET` — Horizon (`horizon-testnet.stellar.org`) and Soroban RPC (`soroban-testnet.stellar.org`) |
+| Network guard | `assertTestnet()` runs before every signing/submission to enforce Testnet-only operation |
+
+**Key files:** `src/config.ts`, `src/lib/wallet.ts`
+
+### 2. Wallet Connection
+
+| Requirement | Implementation |
+|---|---|
+| Connect | `connect()` opens the StellarWalletsKit auth modal — supports Freighter, Albedo, xBull, Lobstr, Hana, Rabet, HOT Wallet, Klever |
+| Disconnect | `disconnect()` clears localStorage and resets all wallet state |
+| Auto-reconnect | On app load, reads `stellarpay.active_wallet` from localStorage, verifies network, and restores session |
+| State management | `useWallet` hook exposes `address`, `balance`, `network`, `connecting`, `error` |
+
+**Key files:** `src/hooks/useWallet.ts`, `src/lib/wallet.ts`, `src/components/ui.tsx` (WalletBar)
+
+### 3. Balance Handling
+
+| Requirement | Implementation |
+|---|---|
+| Fetch XLM balance | `getXlmBalance(address)` calls `server.loadAccount(address)` and finds `asset_type === "native"` |
+| Display | Shown in the header `WalletBar` and the Employer Wallet Balance card with a loading spinner |
+| Auto-refresh | Balance updates after connect, payment sent, and Friendbot funding |
+
+**Key files:** `src/lib/stellar.ts` (`getXlmBalance`), `src/hooks/useWallet.ts` (`refreshBalance`)
+
+### 4. Transaction Flow
+
+| Requirement | Implementation |
+|---|---|
+| Send XLM | `sendXlm()` builds a `TransactionBuilder` with `Operation.payment()`, signs via Freighter, submits via Horizon |
+| Duplicate guard | `pendingTxns` Set prevents concurrent transactions from the same address |
+| Pre-flight check | Verifies sender has sufficient XLM (amount + 1 XLM reserve) before submitting |
+| Success feedback | Toast notification with the amount, recipient name, and a clickable Stellar Expert link |
+| Failure feedback | Toast notification with the error message and descriptive failure reason |
+| Transaction hash | Returned from `submitTransaction()` and embedded in the explorer link |
+
+**Key files:** `src/lib/stellar.ts` (`sendXlm`), `src/App.tsx` (`handlePay`)
+
+### 5. Development Standards
+
+| Requirement | Implementation |
+|---|---|
+| UI setup | React 19 + TypeScript + Vite 8 + Tailwind CSS 4 |
+| Wallet integration | Multi-wallet kit wrapping Freighter + 7 other wallets with theme sync |
+| Balance fetch | Horizon SDK `loadAccount` with 404 handling for unfunded accounts |
+| Transaction logic | Full pipeline — validation, network guard, balance check, build, sign, submit |
+| Error handling | Custom error classes (`WalletError`, `StellarError`, `SorobanError`), try/catch on every async path, toast notifications for all user-facing errors |
+| Testing | Vitest unit tests covering wallet, Stellar SDK, and Soroban integration |
+| Linting | oxlint with React hooks rules |
+| CI | GitHub Actions pipeline — Rust contract build/test, frontend lint/test/build |
+
+**Key files:** `src/lib/stellar.ts`, `src/lib/wallet.ts`, `src/lib/soroban.ts`, `src/__tests__/`
 
 ---
 
 ## Project Architecture
 
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS
-- **Wallet**: Freighter (`@stellar/freighter-api`)
-- **Stellar SDK**: `@stellar/stellar-sdk`
+- **Wallet**: Freighter (`@stellar/freighter-api`) via `@creit-tech/stellar-wallets-kit`
+- **Stellar SDK**: `@stellar/stellar-sdk` v16
 - **Smart Contract**: Rust + Soroban SDK 27
 - **Network**: Stellar Testnet only
 

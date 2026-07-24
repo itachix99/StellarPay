@@ -11,6 +11,7 @@ import {
 import { sign, assertTestnet } from "./wallet";
 import { NETWORK_PASSPHRASE } from "../config";
 import { xlmToStroops as parseXlmToStroops, stroopsToXlm as formatStroops } from "./stellar";
+import type { ContractEvent, ContractEventType, EventSubscriptionOptions } from "../types";
 
 export const SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
 export const sorobanServer = new rpc.Server(SOROBAN_RPC_URL);
@@ -195,4 +196,224 @@ export async function invokeContractCall(params: {
   } finally {
     pendingTxns.delete(signerAddress);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Event Streaming — subscribe to on-chain contract events via polling
+// ---------------------------------------------------------------------------
+
+/** Known event topics emitted by the payroll contract. */
+const EVENT_TOPICS: Record<string, ContractEventType> = {
+  sal_paid: "sal_paid",
+  cyc_done: "cyc_done",
+  cyc_next: "cyc_next",
+  emp_add: "emp_add",
+  emp_rm: "emp_rm",
+  emp_upd: "emp_upd",
+  emp_act: "emp_act",
+  pause: "pause",
+  adm_xfer: "adm_xfer",
+  withdraw: "withdraw",
+};
+
+/** Map a Soroban event topic string to our typed event name. */
+function resolveEventType(topic: string): ContractEventType | null {
+  // Events are emitted as symbol_short!("sal_paid") etc.
+  // The topic string from RPC is the symbol value.
+  for (const [key, value] of Object.entries(EVENT_TOPICS)) {
+    if (topic === key || topic.includes(key)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse a raw Soroban RPC event into a typed ContractEvent.
+ * Uses scValToNative to decode the SCVal topic and value arrays.
+ */
+export function parseContractEvent(raw: {
+  id: string;
+  type: string;
+  ledgerClosedAt: string;
+  topic: xdr.ScVal[];
+  value: xdr.ScVal;
+}): ContractEvent | null {
+  const eventType = resolveEventType(raw.type);
+  if (!eventType) return null;
+
+  const event: ContractEvent = {
+    id: raw.id,
+    type: eventType,
+    timestamp: raw.ledgerClosedAt,
+    rawData: raw,
+  };
+
+  try {
+    // Convert the SCVal arrays to native JS values.
+    // Topics in this contract are emitted as (symbol, ...args).
+    const topics: unknown[] = raw.topic.map((t) => scValToNative(t));
+    const dataValue: unknown = scValToNative(raw.value);
+
+    const topic0 = topics[0];
+    const topic1 = topics[1];
+
+    const extractAddress = (val: unknown): string | undefined => {
+      if (typeof val === "string") return val;
+      if (val && typeof val === "object") {
+        // Address objects may come back as { address: string }
+        const asRecord = val as Record<string, unknown>;
+        if (typeof asRecord.address === "string") return asRecord.address;
+      }
+      return undefined;
+    };
+
+    switch (eventType) {
+      case "sal_paid": {
+        event.employee = extractAddress(topic1);
+        if (typeof dataValue === "bigint" || typeof dataValue === "number") {
+          event.amount = BigInt(dataValue);
+        }
+        break;
+      }
+      case "emp_add":
+      case "emp_upd": {
+        event.employee = extractAddress(topic1);
+        if (typeof dataValue === "bigint" || typeof dataValue === "number") {
+          event.amount = BigInt(dataValue);
+        }
+        break;
+      }
+      case "emp_rm": {
+        event.employee = extractAddress(topic1);
+        break;
+      }
+      case "emp_act": {
+        event.employee = extractAddress(topic1);
+        event.active = dataValue === 1 || dataValue === 1n;
+        break;
+      }
+      case "pause": {
+        event.active = dataValue === 1 || dataValue === 1n;
+        break;
+      }
+      case "withdraw": {
+        event.employee = extractAddress(topic1);
+        if (typeof dataValue === "bigint" || typeof dataValue === "number") {
+          event.amount = BigInt(dataValue);
+        }
+        break;
+      }
+      case "cyc_done": {
+        if (typeof topic0 === "bigint" || typeof topic0 === "number") {
+          event.cycle = Number(topic0);
+        }
+        if (typeof dataValue === "bigint" || typeof dataValue === "number") {
+          event.amount = BigInt(dataValue);
+        }
+        break;
+      }
+      case "cyc_next": {
+        if (typeof dataValue === "bigint" || typeof dataValue === "number") {
+          event.cycle = Number(dataValue);
+        }
+        break;
+      }
+      case "adm_xfer": {
+        event.newAdmin = extractAddress(topic1);
+        break;
+      }
+    }
+  } catch {
+    // If parsing fails, still return the event with raw data
+  }
+
+  return event;
+}
+
+/**
+ * Subscribe to contract events from the Soroban RPC.
+ *
+ * Uses cursor-based polling: on each interval, fetches events newer than
+ * the last seen cursor. Returns an unsubscribe function that stops polling.
+ *
+ * @example
+ * const unsub = subscribeToContractEvents({
+ *   contractId: "C...",
+ *   pollIntervalMs: 5000,
+ *   onEvents: (events) => events.forEach(e => console.log(e.type, e.employee)),
+ *   onError: (err) => console.error(err),
+ * });
+ * // later: unsub();
+ */
+export function subscribeToContractEvents(
+  options: EventSubscriptionOptions,
+): () => void {
+  const {
+    contractId,
+    pollIntervalMs = 5000,
+    limit = 20,
+    onEvents,
+    onError,
+  } = options;
+
+  let cursor: string | undefined;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let stopped = false;
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const filters: rpc.Api.EventFilter[] = [
+        {
+          type: "contract",
+          contractIds: [contractId],
+          topics: [], // match all topics for this contract
+        },
+      ];
+
+      const result = await sorobanServer.getEvents(
+        cursor
+          ? { startLedger: undefined, filters, limit, cursor }
+          : { startLedger: 0, filters, limit }
+      );
+
+      if (result.events && result.events.length > 0) {
+        const parsed: ContractEvent[] = [];
+        for (const rawEvent of result.events) {
+          if (rawEvent.id === cursor) continue; // skip the cursor event itself
+          const parsedEvent = parseContractEvent(rawEvent);
+          if (parsedEvent) {
+            parsed.push(parsedEvent);
+          }
+        }
+        if (parsed.length > 0) {
+          onEvents(parsed);
+        }
+      }
+
+      // Advance cursor to the latest event ID
+      if (result.events && result.events.length > 0) {
+        cursor = result.events[result.events.length - 1].id;
+      }
+    } catch (err) {
+      if (!stopped && onError) {
+        onError(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  }
+
+  // Initial fetch
+  poll();
+
+  // Start polling on interval
+  timer = setInterval(poll, pollIntervalMs);
+
+  return () => {
+    stopped = true;
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
 }

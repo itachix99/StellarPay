@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
 import {
   Address,
   nativeToScVal,
@@ -10,10 +10,12 @@ import {
   fetchContractCycle,
   fetchIsPaused,
   fetchUnpaidPayroll,
+  subscribeToContractEvents,
   xlmToStroops,
   stroopsToXlm,
   NATIVE_SAC_TESTNET,
 } from "../lib/soroban";
+import type { ContractEvent } from "../types";
 import { isValidPublicKey, isValidContractId, parsePositiveXlm } from "../lib/stellar";
 import { useToast } from "../hooks/useToast";
 import { Button, Card, shortKey } from "./ui";
@@ -31,6 +33,8 @@ import {
   Pause,
   PlayCircle,
   Banknote,
+  Radio,
+  WifiOff,
 } from "lucide-react";
 import { EXPLORER_TX } from "../config";
 
@@ -62,12 +66,86 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
   const [withdrawAmount, setWithdrawAmount] = useState("");
 
   // Status Log / Event Stream
-  const [logs, setLogs] = useState<Array<{ id: number; msg: string; time: string; txHash?: string }>>([]);
+  const [logs, setLogs] = useState<Array<{ id: number | string; msg: string; time: string; txHash?: string }>>([]);
+
+  // Live event streaming state
+  const [isLive, setIsLive] = useState(false);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const addLog = (msg: string, txHash?: string) => {
     const time = new Date().toLocaleTimeString();
     setLogs((prev) => [{ id: Date.now(), msg, time, txHash }, ...prev]);
   };
+
+  /** Format a contract event into a human-readable log message. */
+  const formatEventMessage = (ev: ContractEvent): string => {
+    const emp = ev.employee ? shortKey(ev.employee) : "";
+    const amount = ev.amount != null ? stroopsToXlm(ev.amount) : "";
+    switch (ev.type) {
+      case "sal_paid":
+        return `💰 Salary Paid: ${emp} received ${amount} XLM`;
+      case "emp_add":
+        return `➕ Employee Added: ${emp} (${amount} XLM salary)`;
+      case "emp_rm":
+        return `🗑 Employee Removed: ${emp}`;
+      case "emp_upd":
+        return `✏️ Salary Updated: ${emp} → ${amount} XLM`;
+      case "emp_act":
+        return ev.active ? `✅ Employee Activated: ${emp}` : `⛔ Employee Deactivated: ${emp}`;
+      case "pause":
+        return ev.active ? `⏸️ Contract Paused` : `▶️ Contract Unpaused`;
+      case "withdraw":
+        return `💸 Withdrawn: ${amount} XLM → ${emp}`;
+      case "cyc_done":
+        return `✅ Cycle #${ev.cycle ?? "?"} Payroll Done (${amount} XLM total)`;
+      case "cyc_next":
+        return `🔄 Advanced to Cycle #${ev.cycle ?? "?"}`;
+      case "adm_xfer":
+        return `👑 Admin Transferred → ${ev.newAdmin ? shortKey(ev.newAdmin) : "?"}`;
+      default:
+        return `📡 Event: ${ev.type}`;
+    }
+  };
+
+  // Subscribe to live contract events
+  useEffect(() => {
+    // Cleanup previous subscription
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+    setIsLive(false);
+
+    if (!contractId || !isValidContractId(contractId)) return;
+
+    const unsub = subscribeToContractEvents({
+      contractId,
+      pollIntervalMs: 5000,
+      onEvents: (events) => {
+        setIsLive(true);
+        for (const ev of events) {
+          const msg = formatEventMessage(ev);
+          const time = new Date(ev.timestamp).toLocaleTimeString();
+          setLogs((prev) => {
+            // Deduplicate by event ID
+            if (prev.some((l) => String(l.id) === ev.id)) return prev;
+            return [{ id: ev.id, msg, time }, ...prev];
+          });
+        }
+      },
+      onError: () => {
+        setIsLive(false);
+      },
+    });
+
+    unsubscribeRef.current = unsub;
+
+    return () => {
+      unsub();
+      unsubscribeRef.current = null;
+      setIsLive(false);
+    };
+  }, [contractId]);
 
   const refreshContractState = useCallback(async () => {
     if (!contractId || !isValidContractId(contractId)) return;
@@ -560,7 +638,15 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
               <h4 className="text-slate-400 text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5">
                 <Terminal className="h-3.5 w-3.5 text-emerald-500" /> Soroban Contract Execution Stream
               </h4>
-              <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              {isLive ? (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/60">
+                  <Radio className="h-3 w-3 text-emerald-400 animate-pulse" /> Live
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800">
+                  <WifiOff className="h-3 w-3 text-slate-500" /> Offline
+                </span>
+              )}
             </div>
 
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
