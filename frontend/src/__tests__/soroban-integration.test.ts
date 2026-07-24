@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { parseContractEvent } from "../lib/soroban";
 
-const EMP = "GCGORGX4TX2B3RXMZY3BIV3P3JFTS2W2PQ3LUMZPZWJHHJOKXFXXO3J2";
 const VALID_EMP = "GCWOXPHXNLGYMUAKMKXS7V6HQQJLZC7VFJQYUXQPLLCGIHA45MT5EECU";
 
 describe("Contract event parsing", () => {
