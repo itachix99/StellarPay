@@ -1,56 +1,77 @@
-# StellarPay 🚀
+# StellarPay
+
 > Decentralized Payroll & Salary Distribution Platform on Stellar & Soroban
 
-**StellarPay** is a production-ready, mobile-responsive decentralized payroll platform designed for the Stellar Journey to Mastery Hackathon. It enables employers and HR administrators to seamlessly manage employees and execute bulk or direct salary distributions on the Stellar Testnet using XLM and Soroban smart contracts.
+**StellarPay** is a mobile-responsive decentralized payroll platform for the Stellar Journey to Mastery Hackathon. Employers manage employees and execute direct or bulk salary distributions on **Stellar Testnet** using XLM and a Soroban payroll contract.
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-- **Level 1 — Wallet & Direct Transfers**: Freighter Wallet integration, live XLM balance querying, employee roster management, and direct XLM salary transfers on Stellar Testnet.
-- **Level 2 — Soroban Payroll Smart Contract**: On-chain payroll contract deployed to Testnet with role-based access control, roster state management, contract funding, automated multi-employee payroll execution, and event tracking.
-- **Level 3 — Advanced dApp & Automation**: Recurring payroll cycle safety, custom token asset (SAC) payment support, real-time event log streaming, Rust integration tests, Vitest frontend tests, and GitHub Actions CI/CD pipeline.
+- **Level 1 — Wallet & Direct Transfers**: Freighter integration, live XLM balance, local roster, direct XLM salary transfers.
+- **Level 2 — Soroban Payroll Smart Contract**: On-chain roster, admin RBAC, pinned token, pause/withdraw, cycle-safe bulk payroll, events.
+- **Level 3 — Automation & CI**: Dry-run scheduler, Rust + Vitest tests, GitHub Actions CI.
 
 ---
 
-## 🏗️ Project Architecture
+## Project Architecture
 
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS
-- **Wallet**: Freighter Wallet (`@stellar/freighter-api`)
+- **Wallet**: Freighter (`@stellar/freighter-api`)
 - **Stellar SDK**: `@stellar/stellar-sdk`
-- **Smart Contract**: Rust + Soroban SDK (`soroban-sdk`)
-- **Network**: Stellar Testnet
+- **Smart Contract**: Rust + Soroban SDK 27
+- **Network**: Stellar Testnet only
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for storage layout, API, and pause policy.
 
 ---
 
-## 🚀 Quick Start (Local Development)
+## Quick Start (Local Development)
 
 ### 1. Prerequisites
-- Node.js (v18+) & [Bun](https://bun.sh/)
-- Rust & Cargo (1.97+)
-- Stellar CLI (`stellar --version` 27.0.0+)
-- [Freighter Wallet](https://www.freighter.app/) extension (configured to **Testnet**)
 
-### 2. Frontend Setup
+- Node.js (v18+) & [Bun](https://bun.sh/)
+- Rust & Cargo
+- Stellar CLI (`stellar --version` 27+)
+- [Freighter](https://www.freighter.app/) on **Testnet**
+
+### 2. Frontend
+
 ```bash
 cd frontend
+cp .env.example .env   # set VITE_SOROBAN_CONTRACT_ID after deploy
 bun install
 bun run dev
 ```
 
----
+### 3. Contract tests
 
-## 📚 Documentation
-
-- [PLAN.md](PLAN.md) — Multi-level execution plan & milestones.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture, data flow, and smart contract specs.
-- [DEMO.md](DEMO.md) — Step-by-step hackathon presentation & live demo guide.
-- [TESTING.md](TESTING.md) — Contract & frontend testing guide.
-- [DEPLOYMENT.md](DEPLOYMENT.md) — Soroban smart contract build & Stellar Testnet deployment guide.
+```bash
+cd contracts/payroll
+cargo test
+```
 
 ---
 
-## 🛡️ Security & Operational Principles
-- Non-custodial: All transactions signed client-side using Freighter wallet.
-- Admin protection: Only authorized employer wallet addresses can manage roster & execute contract payroll.
-- Testnet-Only: strictly configured for Stellar Testnet. Zero private keys or seeds stored.
+## Documentation
+
+- [PLAN.md](PLAN.md) — Multi-level execution plan
+- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture & contract specs
+- [DEMO.md](DEMO.md) — Live demo guide
+- [TESTING.md](TESTING.md) — Contract & frontend testing
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Build, deploy, initialize with token
+
+---
+
+## Security & Operational Principles
+
+- **Non-custodial UI**: Freighter signs client-side; no private keys in the web app.
+- **Admin protection**: Contract methods require admin `require_auth()`.
+- **Pinned token**: Payroll and withdraw use the token set at `initialize`.
+- **Fund recovery**: Admin `withdraw` recovers excess contract balance.
+- **Emergency pause**: Blocks pay/add/update/withdraw/next_cycle; recovery ops still allowed.
+- **Cycle safety**: `next_cycle` blocked while unpaid active employees remain.
+- **Storage TTL**: Instance and employee entries extended on mutations.
+- **Client guards**: Valid `C...` contract IDs, fail-closed Testnet assert on sign, decimal-string XLM amounts.
+- **Scheduler**: Dry-run by default; execute only with `PAYROLL_EXECUTE=1` + secret (testnet only; never commit keys).
+- **Testnet-only**: Configured for Stellar Testnet.

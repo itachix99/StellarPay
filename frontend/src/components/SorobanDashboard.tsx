@@ -2,15 +2,19 @@ import { useState, useEffect, useCallback, type FormEvent } from "react";
 import {
   Address,
   nativeToScVal,
+  xdr,
 } from "@stellar/stellar-sdk";
 import {
   invokeContractCall,
   fetchContractAdmin,
   fetchContractCycle,
+  fetchIsPaused,
+  fetchUnpaidPayroll,
   xlmToStroops,
+  stroopsToXlm,
   NATIVE_SAC_TESTNET,
 } from "../lib/soroban";
-import { isValidPublicKey } from "../lib/stellar";
+import { isValidPublicKey, isValidContractId, parsePositiveXlm } from "../lib/stellar";
 import { useToast } from "../hooks/useToast";
 import { Button, Card, shortKey } from "./ui";
 import {
@@ -22,8 +26,11 @@ import {
   RefreshCw,
   AlertCircle,
   Coins,
-  Layers,
   ArrowUpRight,
+  Terminal,
+  Pause,
+  PlayCircle,
+  Banknote,
 } from "lucide-react";
 import { EXPLORER_TX } from "../config";
 
@@ -40,6 +47,8 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
   );
   const [adminAddress, setAdminAddress] = useState<string | null>(null);
   const [cycle, setCycle] = useState<number>(0);
+  const [paused, setPaused] = useState(false);
+  const [unpaidXlm, setUnpaidXlm] = useState<string>("0.0000");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,6 +56,10 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
   const [empAddress, setEmpAddress] = useState("");
   const [empSalary, setEmpSalary] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Withdraw form
+  const [withdrawTo, setWithdrawTo] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
 
   // Status Log / Event Stream
   const [logs, setLogs] = useState<Array<{ id: number; msg: string; time: string; txHash?: string }>>([]);
@@ -57,13 +70,19 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
   };
 
   const refreshContractState = useCallback(async () => {
-    if (!contractId || !isValidPublicKey(contractId)) return;
+    if (!contractId || !isValidContractId(contractId)) return;
     setLoading(true);
     try {
-      const admin = await fetchContractAdmin(contractId);
-      const cyc = await fetchContractCycle(contractId);
+      const [admin, cyc, isPaused, unpaid] = await Promise.all([
+        fetchContractAdmin(contractId),
+        fetchContractCycle(contractId),
+        fetchIsPaused(contractId),
+        fetchUnpaidPayroll(contractId),
+      ]);
       setAdminAddress(admin);
       setCycle(cyc);
+      setPaused(isPaused);
+      setUnpaidXlm(stroopsToXlm(unpaid));
     } catch {
       // Contract might not be initialized yet
     } finally {
@@ -77,14 +96,18 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
     }
   }, [contractId, refreshContractState]);
 
-  const isAdmin = userAddress && adminAddress && userAddress === adminAddress;
+  const contractIdValid = !contractId || isValidContractId(contractId);
+  const isAdmin = !!(userAddress && adminAddress && userAddress === adminAddress);
 
-  // Initialize Contract
+  // Initialize Contract with pinned native SAC token
   const handleInitialize = async () => {
     if (!userAddress || !contractId) return;
     setSubmitting(true);
     try {
-      const args = [new Address(userAddress).toScVal()];
+      const args = [
+        new Address(userAddress).toScVal(),
+        new Address(NATIVE_SAC_TESTNET).toScVal(),
+      ];
       const hash = await invokeContractCall({
         contractId,
         method: "initialize",
@@ -120,6 +143,10 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
     }
     if (!contractId) {
       setFormError("Contract ID is missing.");
+      return;
+    }
+    if (paused) {
+      setFormError("Contract is paused. Unpause before adding employees.");
       return;
     }
 
@@ -166,25 +193,38 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
     }
   };
 
-  // Execute Bulk Smart Contract Payroll
+  // Execute Bulk Smart Contract Payroll (uses stored token; no free token arg)
   const handleExecutePayroll = async () => {
     if (!userAddress || !contractId) return;
+    if (paused) {
+      push({ kind: "error", message: "Contract is paused. Unpause before running payroll." });
+      return;
+    }
     setSubmitting(true);
     try {
-      const args = [new Address(NATIVE_SAC_TESTNET).toScVal()];
       const hash = await invokeContractCall({
         contractId,
         method: "pay_salaries",
-        args,
+        args: [],
         signerAddress: userAddress,
       });
       push({
         kind: "success",
-        message: `Executed Soroban smart contract payroll cycle #${cycle + 1}!`,
+        message: `Executed Soroban smart contract payroll for cycle #${cycle}!`,
         href: EXPLORER_TX(hash),
         hrefLabel: "View Tx ↗",
       });
-      addLog(`Executed Smart Contract Payroll Cycle #${cycle + 1}`, hash);
+      addLog(`Executed Smart Contract Payroll Cycle #${cycle}`, hash);
+
+      // Advance to next cycle (contract blocks if unpaid remain)
+      const cycleHash = await invokeContractCall({
+        contractId,
+        method: "next_cycle",
+        args: [],
+        signerAddress: userAddress,
+      });
+      addLog(`Advanced payroll cycle`, cycleHash);
+
       await refreshContractState();
     } catch (e) {
       push({
@@ -196,25 +236,108 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
     }
   };
 
+  const handleTogglePause = async () => {
+    if (!userAddress || !contractId) return;
+    setSubmitting(true);
+    try {
+      const next = !paused;
+      const hash = await invokeContractCall({
+        contractId,
+        method: "set_paused",
+        args: [xdr.ScVal.scvBool(next)],
+        signerAddress: userAddress,
+      });
+      push({
+        kind: "success",
+        message: next ? "Contract paused." : "Contract unpaused.",
+        href: EXPLORER_TX(hash),
+        hrefLabel: "View Tx ↗",
+      });
+      addLog(next ? "Contract paused" : "Contract unpaused", hash);
+      await refreshContractState();
+    } catch (e) {
+      push({
+        kind: "error",
+        message: e instanceof Error ? e.message : "Failed to update pause state.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleWithdraw = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!userAddress || !contractId) return;
+
+    const to = withdrawTo.trim() || userAddress;
+    if (!isValidPublicKey(to)) {
+      push({ kind: "error", message: "Withdraw destination must be a valid G... address." });
+      return;
+    }
+
+    let stroops: bigint;
+    try {
+      parsePositiveXlm(withdrawAmount);
+      stroops = xlmToStroops(withdrawAmount);
+    } catch {
+      push({ kind: "error", message: "Enter a valid positive withdraw amount." });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const hash = await invokeContractCall({
+        contractId,
+        method: "withdraw",
+        args: [
+          new Address(to).toScVal(),
+          nativeToScVal(stroops, { type: "i128" }),
+        ],
+        signerAddress: userAddress,
+      });
+      push({
+        kind: "success",
+        message: `Withdrew ${withdrawAmount} XLM from contract.`,
+        href: EXPLORER_TX(hash),
+        hrefLabel: "View Tx ↗",
+      });
+      addLog(`Withdrew ${withdrawAmount} XLM → ${shortKey(to)}`, hash);
+      setWithdrawAmount("");
+      await refreshContractState();
+    } catch (err) {
+      push({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Withdraw failed.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <Card className="border-emerald-200/60 bg-gradient-to-b from-white to-emerald-50/20">
+    <Card className="border-emerald-200/80 dark:border-emerald-900/60 bg-gradient-to-b from-white to-emerald-50/20 dark:from-slate-900 dark:to-slate-900/95">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 font-bold text-white shadow-md shadow-emerald-600/20">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 font-bold text-white shadow-xs shadow-emerald-600/20">
             <Cpu className="h-6 w-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                 Soroban Smart Contract Payroll
               </h3>
-              <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
+              <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-extrabold px-2.5 py-0.5 uppercase tracking-wider border border-emerald-200 dark:border-emerald-800/80">
                 Level 2
               </span>
+              {paused && (
+                <span className="rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-[10px] font-extrabold px-2.5 py-0.5 uppercase tracking-wider border border-amber-200 dark:border-amber-800/80">
+                  Paused
+                </span>
+              )}
             </div>
-            <p className="text-xs text-slate-500">
-              On-chain automated roster, access control & bulk payout execution
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              On-chain roster, pause, withdraw & bulk payout execution
             </p>
           </div>
         </div>
@@ -233,50 +356,58 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
       </div>
 
       {/* Contract Configuration Bar */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-12 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-12 items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
         <div className="sm:col-span-8">
-          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Contract ID (Stellar Testnet C...)
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+            Deployed Soroban Contract ID (Stellar Testnet C...)
           </label>
           <input
             type="text"
             placeholder="e.g. C..."
             value={contractId}
             onChange={(e) => setContractId(e.target.value.trim())}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-900 focus:border-emerald-500 focus:bg-white focus:outline-none"
+            className={`w-full rounded-xl border ${!contractIdValid ? "border-rose-300 dark:border-rose-700" : "border-slate-200 dark:border-slate-800"} bg-slate-50/80 dark:bg-slate-950 px-3.5 py-2 font-mono text-xs font-medium text-slate-900 dark:text-slate-100 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500/20`}
           />
+          {!contractIdValid && contractId && (
+            <p className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+              Invalid contract ID format. Must be a valid Stellar contract ID (C...).
+            </p>
+          )}
         </div>
 
-        <div className="sm:col-span-4 flex items-center justify-between gap-2 border-t sm:border-t-0 sm:border-l border-slate-100 pt-2 sm:pt-0 sm:pl-4">
+        <div className="sm:col-span-4 flex items-center justify-between gap-2 border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-800 pt-2 sm:pt-0 sm:pl-4">
           <div>
-            <span className="block text-[10px] font-medium text-slate-400">Payroll Cycle</span>
-            <span className="text-lg font-black text-slate-900">#{cycle}</span>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Payroll Cycle</span>
+            <span className="text-xl font-black text-slate-900 dark:text-slate-100 tabular-nums">#{cycle}</span>
+            <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Unpaid {unpaidXlm} XLM
+            </span>
           </div>
           <div>
-            <span className="block text-[10px] font-medium text-slate-400">Admin Role</span>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Admin Access</span>
             {adminAddress ? (
               isAdmin ? (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                  <ShieldCheck className="h-3.5 w-3.5" /> You (Admin)
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/80">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> You (Admin)
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
                   <Shield className="h-3.5 w-3.5 text-slate-400" /> {shortKey(adminAddress)}
                 </span>
               )
             ) : (
-              <span className="text-xs text-amber-600 font-medium">Uninitialized</span>
+              <span className="text-xs text-amber-700 dark:text-amber-300 font-semibold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/60">Uninitialized</span>
             )}
           </div>
         </div>
       </div>
 
       {/* If contract is not deployed/initialized */}
-      {!adminAddress && contractId && (
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-900">
+      {!adminAddress && contractId && contractIdValid && (
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800/80 p-4 text-xs text-amber-900 dark:text-amber-200 shadow-2xs">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-            <span>Contract is deployed but not initialized yet. Initialize to claim admin rights.</span>
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>Contract is deployed but not initialized yet. Initializes admin + pins native SAC token.</span>
           </div>
           <Button
             variant="primary"
@@ -291,17 +422,79 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
 
       {/* Roster & Contract Actions */}
       <div className="mt-6 space-y-6">
+        {/* Admin safety controls */}
+        {isAdmin && (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Emergency Pause</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Blocks pay, add, update salary, withdraw, and next cycle.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="py-1.5 px-3 text-xs"
+                onClick={handleTogglePause}
+                loading={submitting}
+              >
+                {paused ? (
+                  <>
+                    <PlayCircle className="h-3.5 w-3.5" /> Unpause
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-3.5 w-3.5" /> Pause
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <form
+              onSubmit={handleWithdraw}
+              className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs space-y-2"
+            >
+              <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Withdraw Excess Funds
+              </h4>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                <input
+                  type="text"
+                  placeholder="To G... (default: you)"
+                  value={withdrawTo}
+                  onChange={(e) => setWithdrawTo(e.target.value)}
+                  className="sm:col-span-6 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Amount XLM"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="sm:col-span-3 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-xs tabular-nums text-slate-900 dark:text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  required
+                />
+                <Button type="submit" variant="outline" className="sm:col-span-3 w-full py-2 text-xs" loading={submitting} disabled={paused}>
+                  Withdraw
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {/* Add Employee Form for Smart Contract */}
         {isAdmin && (
-          <form onSubmit={handleAddEmployeeContract} className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-              <PlusCircle className="h-4 w-4 text-emerald-600" />
+          <form onSubmit={handleAddEmployeeContract} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 space-y-3 shadow-2xs">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <PlusCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               Add Employee to On-Chain Smart Contract Roster
             </h4>
 
             {formError && (
-              <div className="p-2 text-xs text-rose-700 bg-rose-50 rounded-lg border border-rose-200">
-                {formError}
+              <div className="p-2.5 text-xs font-medium text-rose-800 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 rounded-xl border border-rose-200 dark:border-rose-800/60 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span>{formError}</span>
               </div>
             )}
 
@@ -312,23 +505,23 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
                   placeholder="Stellar Public Key (G...)"
                   value={empAddress}
                   onChange={(e) => setEmpAddress(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   required
                 />
               </div>
               <div className="sm:col-span-3">
                 <input
-                  type="number"
-                  step="0.0000001"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Salary (XLM)"
                   value={empSalary}
                   onChange={(e) => setEmpSalary(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2 text-xs tabular-nums text-slate-900 dark:text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   required
                 />
               </div>
               <div className="sm:col-span-2">
-                <Button type="submit" variant="primary" className="w-full py-2 text-xs" loading={submitting}>
+                <Button type="submit" variant="primary" className="w-full py-2 text-xs" loading={submitting} disabled={paused}>
                   Add On-Chain
                 </Button>
               </div>
@@ -337,40 +530,44 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
         )}
 
         {/* Execute Contract Bulk Payroll */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-5 text-white shadow-md">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-5 text-white shadow-md border border-slate-800">
           <div>
             <div className="flex items-center gap-2">
-              <Play className="h-5 w-5 text-emerald-400" />
+              <Play className="h-5 w-5 text-emerald-400 shrink-0" />
               <h4 className="text-base font-bold">Trigger On-Chain Bulk Payroll</h4>
             </div>
-            <p className="text-xs text-slate-300 mt-1">
-              Soroban smart contract iterates through all active employees and transfers XLM salaries automatically.
+            <p className="text-xs text-slate-300 dark:text-slate-400 mt-1 leading-relaxed">
+              Pays unpaid active employees using the token pinned at initialize, then advances the cycle.
             </p>
           </div>
 
           <Button
             variant="primary"
-            className="w-full sm:w-auto px-6 py-3 text-sm shadow-lg shadow-emerald-500/30"
+            className="w-full sm:w-auto px-6 py-3 text-sm shadow-lg shadow-emerald-600/30"
             onClick={handleExecutePayroll}
             loading={submitting}
-            disabled={!isAdmin || submitting}
+            disabled={!isAdmin || submitting || paused}
           >
             <Coins className="h-4 w-4" />
-            Execute Cycle #{cycle + 1} Payroll
+            Execute Cycle #{cycle} Payroll
           </Button>
         </div>
 
         {/* Event Logs & Execution Feed */}
         {logs.length > 0 && (
-          <div className="bg-slate-950 rounded-2xl p-4 text-emerald-400 font-mono text-xs border border-slate-800">
-            <h4 className="text-slate-400 text-[11px] uppercase tracking-wider font-bold mb-3 flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5" /> Soroban Contract Execution Stream
-            </h4>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+          <div className="bg-slate-950 rounded-2xl p-4 text-emerald-400 font-mono text-xs border border-slate-800 shadow-inner">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+              <h4 className="text-slate-400 text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5">
+                <Terminal className="h-3.5 w-3.5 text-emerald-500" /> Soroban Contract Execution Stream
+              </h4>
+              <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
               {logs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between border-b border-slate-900 pb-1.5">
+                <div key={log.id} className="flex items-center justify-between border-b border-slate-900/80 pb-1.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-600">[{log.time}]</span>
+                    <span className="text-slate-500">[{log.time}]</span>
                     <span>{log.msg}</span>
                   </div>
                   {log.txHash && (
@@ -378,7 +575,7 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
                       href={EXPLORER_TX(log.txHash)}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-slate-400 hover:text-emerald-300 flex items-center gap-1 text-[11px]"
+                      className="text-slate-400 hover:text-emerald-300 flex items-center gap-1 text-[11px] font-sans font-semibold transition"
                     >
                       Tx Hash <ArrowUpRight className="h-3 w-3" />
                     </a>

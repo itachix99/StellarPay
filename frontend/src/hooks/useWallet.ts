@@ -1,9 +1,14 @@
 // Wallet connection state + testnet check, exposed as a hook.
 import { useCallback, useEffect, useState } from "react";
+import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
+import { KitEventType } from "@creit-tech/stellar-wallets-kit/types";
 import {
-  connect as fConnect,
+  connect as kitConnect,
   getConnectedAddress,
-  assertTestnet,
+  checkTestnet,
+  disconnectWallet,
+  openAuthModal,
+  openProfileModal,
   WalletError,
 } from "../lib/wallet";
 import { getXlmBalance } from "../lib/stellar";
@@ -41,31 +46,43 @@ export function useWallet() {
     }
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (themeMode?: "light" | "dark") => {
     setState((s) => ({ ...s, connecting: true, error: null }));
     try {
-      const address = await fConnect();
-      // Check network but don't block connection — surface it as a warning.
-      let network: WalletState["network"] = "UNKNOWN";
+      const address = await kitConnect(themeMode);
+      const network = await checkTestnet();
       try {
-        await assertTestnet();
-        network = "TESTNET";
+        localStorage.setItem("stellarpay.active_wallet", "connected");
       } catch {
-        network = "WRONG";
+        // localStorage unavailable
       }
       setState((s) => ({ ...s, address, network, connecting: false }));
       await refreshBalance(address);
+      return address;
     } catch (e) {
+      try {
+        localStorage.removeItem("stellarpay.active_wallet");
+      } catch {
+        // localStorage unavailable
+      }
+      const errorMsg = e instanceof WalletError ? e.message : "Failed to connect wallet.";
       setState((s) => ({
         ...s,
+        address: null,
         connecting: false,
-        error: e instanceof WalletError ? e.message : "Failed to connect wallet.",
+        error: errorMsg,
       }));
+      throw e;
     }
   }, [refreshBalance]);
 
-  const disconnect = useCallback(() => {
-    // Freighter has no disconnect RPC; we forget the session locally.
+  const disconnect = useCallback(async () => {
+    try {
+      localStorage.removeItem("stellarpay.active_wallet");
+    } catch {
+      // localStorage unavailable
+    }
+    await disconnectWallet();
     setState({
       address: null,
       balance: null,
@@ -76,23 +93,60 @@ export function useWallet() {
     });
   }, []);
 
-  // Auto-reconnect if the user already authorized this app.
+  // Subscribe to StellarWalletsKit events for live wallet state updates
+  useEffect(() => {
+    let subState: (() => void) | undefined;
+    let subDisconnect: (() => void) | undefined;
+
+    try {
+      subState = StellarWalletsKit.on(KitEventType.STATE_UPDATED, (evt) => {
+        const addr = evt.payload?.address;
+        if (addr) {
+          setState((s) => ({ ...s, address: addr }));
+          refreshBalance(addr);
+        }
+      });
+
+      subDisconnect = StellarWalletsKit.on(KitEventType.DISCONNECT, () => {
+        disconnect();
+      });
+    } catch {
+      // StellarWalletsKit may not be initialized yet before first connect
+    }
+
+    return () => {
+      if (subState) subState();
+      if (subDisconnect) subDisconnect();
+    };
+  }, [refreshBalance, disconnect]);
+
+  // Auto-reconnect active wallet on load
   useEffect(() => {
     (async () => {
-      const addr = await getConnectedAddress();
-      if (addr) {
-        let network: WalletState["network"] = "UNKNOWN";
-        try {
-          await assertTestnet();
-          network = "TESTNET";
-        } catch {
-          network = "WRONG";
+      let activeWallet: string | null = null;
+      try {
+        activeWallet = localStorage.getItem("stellarpay.active_wallet");
+      } catch {
+        // localStorage unavailable
+      }
+
+      if (activeWallet) {
+        const addr = await getConnectedAddress();
+        if (addr) {
+          const network = await checkTestnet();
+          setState((s) => ({ ...s, address: addr, network }));
+          await refreshBalance(addr);
         }
-        setState((s) => ({ ...s, address: addr, network }));
-        await refreshBalance(addr);
       }
     })();
   }, [refreshBalance]);
 
-  return { ...state, connect, disconnect, refreshBalance };
+  return {
+    ...state,
+    connect,
+    disconnect,
+    refreshBalance,
+    openAuthModal,
+    openProfileModal,
+  };
 }

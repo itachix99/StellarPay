@@ -1,16 +1,42 @@
 // Employee roster persisted in localStorage (Level 1 — local list only).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Employee } from "../types";
-import { isValidPublicKey } from "../lib/stellar";
+import { isValidPublicKey, isValidXlmAmount } from "../lib/stellar";
 
 const KEY = "stellarpay.employees";
 
 export class RosterError extends Error {}
 
+function isEmployeeShape(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeEmployee(raw: Record<string, unknown>): Employee | null {
+  const address = typeof raw.address === "string" ? raw.address.trim() : "";
+  const salary = typeof raw.salary === "string" ? raw.salary.trim() : "";
+  if (!isValidPublicKey(address) || !isValidXlmAmount(salary)) {
+    return null;
+  }
+
+  const name =
+    typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : undefined;
+  const active = typeof raw.active === "boolean" ? raw.active : true;
+  const addedAt = typeof raw.addedAt === "number" ? raw.addedAt : Date.now();
+  const updatedAt = typeof raw.updatedAt === "number" ? raw.updatedAt : addedAt;
+
+  return { address, name, salary, active, addedAt, updatedAt };
+}
+
 function load(): Employee[] {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Employee[]) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(isEmployeeShape)
+      .map(sanitizeEmployee)
+      .filter((e): e is Employee => e !== null);
   } catch {
     return [];
   }
@@ -18,6 +44,8 @@ function load(): Employee[] {
 
 export function useEmployees() {
   const [employees, setEmployees] = useState<Employee[]>(load);
+  const employeesRef = useRef(employees);
+  employeesRef.current = employees;
 
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(employees));
@@ -29,36 +57,28 @@ export function useEmployees() {
       if (!isValidPublicKey(address)) {
         throw new RosterError("Invalid Stellar public key (must start with G).");
       }
-      const amt = Number(input.salary);
-      if (!Number.isFinite(amt) || amt <= 0) {
+      if (!isValidXlmAmount(input.salary)) {
         throw new RosterError("Salary must be a positive number.");
       }
-      // Validate duplicates before setState — throwing inside the updater
-      // does not propagate to this caller in React.
-      setEmployees((prev) => {
-        if (prev.some((e) => e.address === address)) {
-          // Already present: return unchanged; caller re-checks below.
-          return prev;
-        }
-        const now = Date.now();
-        return [
-          ...prev,
-          {
-            address,
-            name: input.name?.trim() || undefined,
-            salary: input.salary,
-            active: true,
-            addedAt: now,
-            updatedAt: now,
-          },
-        ];
-      });
-      // Closure-based duplicate guard for immediate user feedback.
-      if (employees.some((e) => e.address === address)) {
+
+      if (employeesRef.current.some((e) => e.address === address)) {
         throw new RosterError("This employee is already in the roster.");
       }
+
+      const now = Date.now();
+      setEmployees((prev) => [
+        ...prev,
+        {
+          address,
+          name: input.name?.trim() || undefined,
+          salary: input.salary.trim(),
+          active: true,
+          addedAt: now,
+          updatedAt: now,
+        },
+      ]);
     },
-    [employees],
+    [],
   );
 
   const removeEmployee = useCallback((address: string) => {

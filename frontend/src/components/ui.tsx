@@ -1,5 +1,5 @@
-// UI components for StellarPay (Level 1) using lucide-react & Tailwind CSS.
 import { useState, type ButtonHTMLAttributes, type ReactNode, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   Wallet,
   LogOut,
@@ -12,9 +12,13 @@ import {
   Coins,
   ShieldCheck,
   HelpCircle,
+  Copy,
+  Check,
+  Sun,
+  Moon,
 } from "lucide-react";
 import type { Employee } from "../types";
-import { isValidPublicKey } from "../lib/stellar";
+import { isValidPublicKey, isValidXlmAmount } from "../lib/stellar";
 
 export function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -31,20 +35,19 @@ type Variant = "primary" | "secondary" | "danger" | "ghost" | "outline";
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   loading?: boolean;
-  children: ReactNode;
 }
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500 shadow-sm shadow-emerald-600/20",
+    "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 hover:bg-emerald-500 dark:hover:bg-emerald-400 font-bold focus-visible:ring-emerald-500 shadow-xs active:scale-[0.98]",
   secondary:
-    "bg-slate-900 text-white hover:bg-slate-800 focus-visible:ring-slate-700 shadow-sm",
+    "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 focus-visible:ring-slate-700 shadow-2xs active:scale-[0.98]",
   danger:
-    "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 focus-visible:ring-rose-500",
+    "bg-rose-600 text-white hover:bg-rose-500 focus-visible:ring-rose-500 shadow-2xs active:scale-[0.98]",
   ghost:
-    "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+    "bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:ring-slate-400",
   outline:
-    "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:text-slate-900 shadow-2xs",
+    "border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#14201e] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 focus-visible:ring-slate-400 shadow-2xs",
 };
 
 export function Button({
@@ -53,31 +56,58 @@ export function Button({
   disabled,
   children,
   className = "",
-  ...rest
+  type = "button",
+  ...props
 }: BtnProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${VARIANTS[variant]} ${className}`}
+      type={type}
       disabled={disabled || loading}
-      {...rest}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs tracking-wide transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${VARIANTS[variant]} ${className}`}
+      {...props}
     >
-      {loading ? <Spinner /> : null}
+      {loading && <Spinner />}
       {children}
     </button>
   );
 }
 
 export function Card({
+  title,
+  subtitle,
+  action,
   children,
   className = "",
 }: {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <div
-      className={`rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition-all hover:shadow-sm ${className}`}
+      className={`rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#121b19] p-5 sm:p-6 shadow-xs ${className}`}
     >
+      {(title || action) && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-4">
+          <div>
+            {typeof title === "string" ? (
+              <h3 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                {title}
+              </h3>
+            ) : (
+              title
+            )}
+            {subtitle && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                {subtitle}
+              </p>
+            )}
+          </div>
+          {action && <div>{action}</div>}
+        </div>
+      )}
       {children}
     </div>
   );
@@ -94,16 +124,20 @@ interface WalletBarProps {
   loadingBalance: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
 export function WalletBar({
   address,
   balance,
-  network,
+  network: _network,
   connecting,
   loadingBalance,
   onConnect,
   onDisconnect,
+  theme,
+  onToggleTheme,
 }: WalletBarProps) {
   const [copied, setCopied] = useState(false);
 
@@ -114,67 +148,72 @@ export function WalletBar({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!address) {
-    return (
-      <Button onClick={onConnect} loading={connecting} variant="primary">
-        <Wallet className="h-4 w-4" />
-        Connect Freighter
-      </Button>
-    );
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-      {/* Network Badge */}
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-          network === "TESTNET"
-            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-            : "bg-amber-50 text-amber-700 border border-amber-200"
-        }`}
+      {/* Network Ledger Indicator Pill */}
+      <div className="flex items-center gap-2 rounded-full bg-slate-100 dark:bg-[#14201e] px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+        <span>Stellar Testnet</span>
+      </div>
+
+      {/* Theme Toggle Button */}
+      <button
+        type="button"
+        onClick={onToggleTheme}
+        aria-label="Toggle Theme"
+        title={`Current mode: ${theme}. Click to toggle light/dark mode.`}
+        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#14201e] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none shadow-2xs cursor-pointer"
       >
-        <span
-          className={`h-2 w-2 rounded-full ${
-            network === "TESTNET" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
-          }`}
-        />
-        {network === "TESTNET" ? "Stellar Testnet" : "Wrong Network"}
-      </span>
+        {theme === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
+      </button>
 
-      {/* Balance display */}
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-1.5 text-sm font-medium text-slate-700">
-        <Coins className="h-4 w-4 text-emerald-600" />
-        {loadingBalance ? (
-          <Spinner className="text-slate-400" />
-        ) : (
-          <span>
-            <strong className="font-bold text-slate-900">
-              {balance !== null ? Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "0.00"}
-            </strong>{" "}
-            <span className="text-xs text-slate-500 font-normal">XLM</span>
-          </span>
-        )}
-      </div>
+      {!address ? (
+        <Button onClick={onConnect} loading={connecting} variant="primary">
+          <Wallet className="h-4 w-4" />
+          Connect wallet
+        </Button>
+      ) : (
+        <>
+          {/* Balance display */}
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#14201e] px-3.5 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200">
+            <Coins className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            {loadingBalance ? (
+              <Spinner className="text-slate-400" />
+            ) : (
+              <span className="tabular-nums font-mono">
+                <strong className="font-bold text-slate-900 dark:text-slate-100">
+                  {balance !== null ? Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                </strong>{" "}
+                <span className="text-[10px] text-slate-500 font-sans">XLM</span>
+              </span>
+            )}
+          </div>
 
-      {/* Account pill */}
-      <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
-        <button
-          onClick={handleCopy}
-          title="Click to copy public key"
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium text-slate-700 hover:text-emerald-600 transition"
-        >
-          <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-          {shortKey(address)}
-          {copied && <span className="text-[10px] text-emerald-600 font-sans font-bold">Copied!</span>}
-        </button>
-        <button
-          onClick={onDisconnect}
-          title="Disconnect wallet"
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 transition"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-        </button>
-      </div>
+          {/* Account pill */}
+          <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#14201e] p-1 shadow-2xs">
+            <button
+              onClick={handleCopy}
+              title="Click to copy public key"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>{shortKey(address)}</span>
+              {copied ? (
+                <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              ) : (
+                <Copy className="h-3 w-3 text-slate-400 shrink-0 opacity-70 hover:opacity-100" />
+              )}
+            </button>
+            <button
+              onClick={onDisconnect}
+              title="Disconnect wallet"
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-600 transition focus:outline-none cursor-pointer"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -202,8 +241,7 @@ export function EmployeeForm({ onAdd }: EmployeeFormProps) {
       return;
     }
 
-    const numSalary = Number(salary);
-    if (!salary || isNaN(numSalary) || numSalary <= 0) {
+    if (!isValidXlmAmount(salary)) {
       setError("Salary must be a positive XLM amount.");
       return;
     }
@@ -219,30 +257,30 @@ export function EmployeeForm({ onAdd }: EmployeeFormProps) {
   };
 
   return (
-    <Card className="border-slate-200 bg-white">
+    <Card className="border-slate-200/90 dark:border-slate-800/90 bg-white dark:bg-[#101a18]">
       <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60">
             <PlusCircle className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Add New Employee</h3>
-            <p className="text-xs text-slate-500">Register employee Stellar wallet for salary disbursement</p>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Add New Employee</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Register employee Stellar wallet for salary disbursement</p>
           </div>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-medium text-rose-700">
-            <AlertCircle className="h-4 w-4 shrink-0" />
+          <div className="flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 p-3 text-xs font-medium text-rose-800 dark:text-rose-300">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
-          <div className="sm:col-span-4">
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+        <div className="grid grid-cols-1 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Employee Name / Role (Optional)
             </label>
             <input
@@ -250,12 +288,12 @@ export function EmployeeForm({ onAdd }: EmployeeFormProps) {
               placeholder="e.g. Alice Chen (Lead Engineer)"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0b1413] px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-[#0b1413] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
             />
           </div>
 
-          <div className="sm:col-span-5">
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Stellar Wallet Address <span className="text-rose-500">*</span>
             </label>
             <input
@@ -266,13 +304,13 @@ export function EmployeeForm({ onAdd }: EmployeeFormProps) {
                 setAddress(e.target.value);
                 if (error) setError(null);
               }}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-sm font-mono text-slate-900 placeholder:font-sans placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0b1413] px-3.5 py-2.5 text-sm font-mono text-slate-900 dark:text-slate-100 placeholder:font-sans placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-[#0b1413] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
               required
             />
           </div>
 
-          <div className="sm:col-span-3">
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Salary (XLM) <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
@@ -286,10 +324,10 @@ export function EmployeeForm({ onAdd }: EmployeeFormProps) {
                   setSalary(e.target.value);
                   if (error) setError(null);
                 }}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0b1413] px-3.5 py-2.5 pr-12 text-sm text-slate-900 dark:text-slate-100 tabular-nums placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-[#0b1413] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
                 required
               />
-              <span className="absolute right-3.5 top-2 text-xs font-medium text-slate-400">XLM</span>
+              <span className="absolute right-3.5 top-3 text-xs font-semibold text-slate-400 dark:text-slate-500">XLM</span>
             </div>
           </div>
         </div>
@@ -325,41 +363,41 @@ export function EmployeeCard({ employee, onPay, onRemove }: EmployeeCardProps) {
     : "EMP";
 
   return (
-    <Card className="flex flex-col justify-between border-slate-200/90 bg-white hover:border-slate-300">
+    <Card className="flex flex-col justify-between border-slate-200/90 dark:border-slate-800/90 bg-white dark:bg-[#101a18] hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm">
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 font-bold text-white text-sm shadow-xs">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 font-extrabold text-white text-sm shadow-2xs">
               {initials}
             </div>
             <div>
-              <h4 className="text-sm font-semibold text-slate-900">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">
                 {employee.name || "Unnamed Employee"}
               </h4>
-              <p className="text-xs font-mono text-slate-500">{shortKey(employee.address)}</p>
+              <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">{shortKey(employee.address)}</p>
             </div>
           </div>
           <button
             onClick={() => onRemove(employee.address)}
             title="Remove from roster"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 hover:text-rose-600 dark:hover:text-rose-400 transition"
           >
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 p-3">
-          <span className="text-xs font-medium text-slate-500">Monthly Salary</span>
-          <span className="text-sm font-bold text-slate-900">
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50/90 dark:bg-[#0b1413] border border-slate-100 dark:border-slate-800/80 p-3">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Monthly Salary</span>
+          <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums font-mono">
             {Number(employee.salary).toLocaleString()}{" "}
-            <span className="text-xs text-slate-400 font-normal">XLM</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">XLM</span>
           </span>
         </div>
       </div>
 
-      <div className="mt-4 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-          <CheckCircle2 className="h-3 w-3" /> Active
+      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200/70 dark:border-emerald-800/70">
+          <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Active
         </span>
 
         <Button
@@ -393,8 +431,7 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
     e.preventDefault();
     setModalError(null);
 
-    const amt = Number(amount);
-    if (!amount || isNaN(amt) || amt <= 0) {
+    if (!isValidXlmAmount(amount)) {
       setModalError("Please enter a valid salary amount.");
       return;
     }
@@ -408,20 +445,22 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#121b19] p-6 shadow-xl border border-slate-200/90 dark:border-slate-800 animate-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60">
               <Send className="h-4 w-4" />
             </div>
-            <h3 className="text-base font-semibold text-slate-900">Confirm Direct Payment</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Confirm Direct Payment</h3>
           </div>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
           >
             ✕
           </button>
@@ -429,29 +468,29 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
 
         <form onSubmit={handlePaySubmit} className="mt-4 space-y-4">
           {modalError && (
-            <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-medium text-rose-700">
-              <AlertCircle className="h-4 w-4 shrink-0" />
+            <div className="flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 p-3 text-xs font-medium text-rose-800 dark:text-rose-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
               <span>{modalError}</span>
             </div>
           )}
 
-          <div className="rounded-xl bg-slate-50 p-4 space-y-2 border border-slate-100">
+          <div className="rounded-xl bg-slate-50 dark:bg-[#0b1413] p-4 space-y-2 border border-slate-100 dark:border-slate-800">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Recipient:</span>
-              <span className="font-semibold text-slate-900">{employee.name || "Unnamed"}</span>
+              <span className="text-slate-500 dark:text-slate-400">Recipient:</span>
+              <span className="font-bold text-slate-900 dark:text-slate-100">{employee.name || "Unnamed"}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Stellar Address:</span>
-              <span className="font-mono text-slate-700">{shortKey(employee.address)}</span>
+              <span className="text-slate-500 dark:text-slate-400">Stellar Address:</span>
+              <span className="font-mono text-slate-700 dark:text-slate-300">{shortKey(employee.address)}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Network:</span>
-              <span className="font-medium text-emerald-700">Stellar Testnet</span>
+              <span className="text-slate-500 dark:text-slate-400">Network:</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">Stellar Testnet</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Payment Amount (XLM)
             </label>
             <div className="relative">
@@ -464,17 +503,17 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
                   setAmount(e.target.value);
                   if (modalError) setModalError(null);
                 }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-12 text-sm font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1413] px-3.5 py-2.5 pr-12 text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 required
               />
-              <span className="absolute right-3.5 top-3 text-xs font-semibold text-slate-400">XLM</span>
+              <span className="absolute right-3.5 top-3 text-xs font-bold text-slate-400 dark:text-slate-500">XLM</span>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 text-xs text-slate-500 bg-amber-50/70 border border-amber-200/60 p-3 rounded-xl">
-            <HelpCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-            <p>
-              This transaction will prompt your <strong>Freighter Wallet</strong> for signature before submitting directly to Stellar Testnet.
+          <div className="flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200 bg-amber-50/80 dark:bg-amber-950/50 border border-amber-200/70 dark:border-amber-800/60 p-3 rounded-xl">
+            <HelpCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              This transaction will prompt your connected wallet for signature before submitting directly to Stellar Testnet.
             </p>
           </div>
 
@@ -494,6 +533,7 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
