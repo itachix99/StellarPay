@@ -357,8 +357,12 @@ export function subscribeToContractEvents(
     onError,
   } = options;
 
+  const MAX_BACKOFF_MS = 60_000;
+  const BACKOFF_MULTIPLIER = 2;
+
   let cursor: string | undefined;
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let currentInterval = pollIntervalMs;
   let stopped = false;
 
   async function poll() {
@@ -396,23 +400,30 @@ export function subscribeToContractEvents(
       if (result.events && result.events.length > 0) {
         cursor = result.events[result.events.length - 1].id;
       }
+
+      // Reset backoff on successful poll
+      currentInterval = pollIntervalMs;
     } catch (err) {
       if (!stopped && onError) {
         onError(err instanceof Error ? err : new Error(String(err)));
       }
+      // Exponential backoff on error
+      currentInterval = Math.min(currentInterval * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
+    }
+
+    // Schedule next poll (recursive setTimeout enables dynamic intervals)
+    if (!stopped) {
+      timer = setTimeout(poll, currentInterval);
     }
   }
 
   // Initial fetch
   poll();
 
-  // Start polling on interval
-  timer = setInterval(poll, pollIntervalMs);
-
   return () => {
     stopped = true;
     if (timer !== null) {
-      clearInterval(timer);
+      clearTimeout(timer);
       timer = null;
     }
   };

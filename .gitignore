@@ -22,3 +22,6 @@ target/
 
 # Antigravity artifacts / logs local scratch
 .gemini/
+
+TESTING.md 
+Makefile

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { SorobanDashboard } from "../components/SorobanDashboard";
+import {
+  fetchContractAdmin,
+  fetchContractCycle,
+  fetchIsPaused,
+} from "../lib/soroban";
 
 const ADMIN = "GCWOXPHXNLGYMUAKMKXS7V6HQQJLZC7VFJQYUXQPLLCGIHA45MT5EECU";
 
@@ -20,14 +25,121 @@ vi.mock("../hooks/useToast", () => ({
   useToast: () => ({ push: vi.fn() }),
 }));
 
-describe("SorobanDashboard smoke test", () => {
+describe("SorobanDashboard", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    cleanup();
+    vi.mocked(fetchContractAdmin).mockResolvedValue(null);
+    vi.mocked(fetchContractCycle).mockResolvedValue(0);
+    vi.mocked(fetchIsPaused).mockResolvedValue(false);
   });
 
-  it("renders the dashboard header", () => {
-    render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
-    expect(screen.getByText("Soroban Smart Contract Payroll")).toBeInTheDocument();
-    expect(screen.getByText(/On-chain roster, pause, withdraw & bulk payout execution/i)).toBeInTheDocument();
+  describe("smoke test", () => {
+    it("renders the dashboard header", () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      expect(screen.getByText("Soroban Smart Contract Payroll")).toBeInTheDocument();
+      expect(screen.getByText(/On-chain roster, pause, withdraw & bulk payout execution/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("contract configuration", () => {
+    it("renders the contract ID input field with env value", () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      const input = screen.getByPlaceholderText(/e\.g\. C\.\.\./i);
+      expect(input).toBeInTheDocument();
+      expect(input).toHaveValue("CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY");
+    });
+
+    it("shows payroll cycle display", () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      // The cycle is shown as "#0" inside a span with text-xl
+      expect(screen.getByText("Payroll Cycle")).toBeInTheDocument();
+    });
+  });
+
+  describe("uninitialized contract state", () => {
+    it("shows Uninitialized badge when admin is null", async () => {
+      vi.mocked(fetchContractAdmin).mockResolvedValue(null);
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText("Uninitialized")).toBeInTheDocument();
+      });
+      expect(screen.getByText(/not initialized yet/i)).toBeInTheDocument();
+    });
+
+    it("shows Initialize Contract button when admin is null", async () => {
+      vi.mocked(fetchContractAdmin).mockResolvedValue(null);
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText("Initialize Contract")).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("initialized contract — not admin", () => {
+    it("does not show admin controls when user is not admin", async () => {
+      const otherAdmin = "GCVOXPHXNLGYMUAKMKXS7V6HQQJLZC7VFJQYUXQPLLCGIHA45MT5EECU";
+      vi.mocked(fetchContractAdmin).mockResolvedValue(otherAdmin);
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.queryByText(/You \(Admin\)/i)).not.toBeInTheDocument();
+      });
+      expect(screen.getByText(/execute cycle/i)).toBeDisabled();
+    });
+  });
+
+  describe("initialized contract — admin mode", () => {
+    beforeEach(() => {
+      vi.mocked(fetchContractAdmin).mockResolvedValue(ADMIN);
+    });
+
+    it("shows You (Admin) badge when user matches contract admin", async () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText(/You \(Admin\)/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows add employee form for admin", async () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText(/Add Employee to On-Chain Smart Contract Roster/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows Emergency Pause button for admin", async () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText(/Emergency Pause/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows Withdraw form for admin", async () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText("Withdraw Excess Funds")).toBeInTheDocument();
+      });
+      expect(screen.getByPlaceholderText(/To G\.\.\./i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Amount XLM/i)).toBeInTheDocument();
+    });
+
+    it("shows Execute Payroll button enabled for admin", async () => {
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        const btn = screen.getByText(/Execute Cycle/i);
+        expect(btn).not.toBeDisabled();
+      });
+    });
+  });
+
+  describe("paused contract state", () => {
+    it("shows Paused badge when contract is paused", async () => {
+      vi.mocked(fetchContractAdmin).mockResolvedValue(ADMIN);
+      vi.mocked(fetchIsPaused).mockResolvedValue(true);
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+      await waitFor(() => {
+        expect(screen.getByText("Paused")).toBeInTheDocument();
+      });
+      expect(screen.getByText(/Unpause/i)).toBeInTheDocument();
+    });
   });
 });
