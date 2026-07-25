@@ -11,6 +11,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/__tests__/setup.ts'],
+    env: {
+      VITE_SOROBAN_CONTRACT_ID: 'CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY',
+    },
     server: {
       deps: {
         inline: ['@stellar/freighter-api', '@creit-tech/stellar-wallets-kit', '@jsr/creit-tech__stellar-wallets-kit']
