@@ -328,7 +328,7 @@ Click "Connect Wallet" — the StellarWalletsKit modal should show all 8 support
 
 ## Documentation
 
-- [README.md](README.md) — Level 1 requirements documentation
+- [README.md](README.md) — Level 1 & Level 2 requirements documentation
 - [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture, contract specs, and security model
 
 ## Useful Links
