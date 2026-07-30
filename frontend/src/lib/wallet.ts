@@ -173,6 +173,19 @@ export async function getConnectedAddress(): Promise<string | null> {
 export async function checkTestnet(): Promise<"TESTNET" | "WRONG" | "UNKNOWN"> {
   try {
     initStellarWalletsKit();
+
+    // xBull doesn't support getNetwork() (always rejects).
+    // The kit is initialized with TESTNET, and xBull enforces the correct
+    // network at signing time when it receives the network passphrase.
+    try {
+      const mod = StellarWalletsKit.selectedModule;
+      if (mod && mod.productId === XBULL_ID) {
+        return "TESTNET";
+      }
+    } catch {
+      // No module selected yet — fall through to getNetwork()
+    }
+
     const res = await StellarWalletsKit.getNetwork();
     if (res.networkPassphrase === NETWORK_PASSPHRASE) {
       return "TESTNET";
@@ -183,12 +196,17 @@ export async function checkTestnet(): Promise<"TESTNET" | "WRONG" | "UNKNOWN"> {
   }
 }
 
-/** Hard network guard for signing / submitting paths */
+/** Hard network guard for signing / submitting paths — blocks WRONG *and* UNKNOWN. */
 export async function assertTestnet(): Promise<void> {
   const status = await checkTestnet();
   if (status === "WRONG") {
     throw new WalletError(
       "Wrong network selected in wallet. Please switch your wallet to Stellar Testnet."
+    );
+  }
+  if (status === "UNKNOWN") {
+    throw new WalletError(
+      "Unable to verify wallet network. Ensure your wallet is connected to Stellar Testnet."
     );
   }
 }

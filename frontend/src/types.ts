@@ -45,6 +45,33 @@ export interface ContractEvent {
   rawData: unknown;
 }
 
+/**
+ * A general payment draft used for direct XLM transfers.
+ * Replaces the requirement for an Employee object in the payment flow.
+ */
+export interface PaymentDraft {
+  /** Recipient Stellar public key (G...) */
+  to: string;
+  /** XLM amount as a decimal string */
+  amount: string;
+  /** Optional memo text */
+  memo?: string;
+  /** Optional display label for the receipt */
+  label?: string;
+  /** Where the payment originated */
+  source: "direct" | "roster";
+}
+
+/** Receipt for a completed payment */
+export interface PaymentReceipt {
+  txHash: string;
+  to: string;
+  amount: string;
+  label?: string;
+  memo?: string;
+  timestamp: number;
+}
+
 /** Options for event subscription. */
 export interface EventSubscriptionOptions {
   contractId: string;

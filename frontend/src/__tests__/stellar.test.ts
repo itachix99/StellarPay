@@ -26,7 +26,7 @@ describe("Stellar Validation & Unit Conversion Helpers", () => {
   });
 
   it("validates Stellar C... contract IDs correctly", () => {
-    const validContract = "CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY";
+    const validContract = "CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV";
     const gKey = "GCWOXPHXNLGYMUAKMKXS7V6HQQJLZC7VFJQYUXQPLLCGIHA45MT5EECU";
 
     expect(isValidContractId(validContract)).toBe(true);

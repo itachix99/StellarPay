@@ -2,6 +2,7 @@
 // Surfaces what the product does, the tech stack, supported wallets, the
 // deployed contract address, security posture, and quick-start steps.
 import { useState, type ReactNode } from "react";
+import { useTheme } from "../hooks/useTheme";
 import { createPortal } from "react-dom";
 import {
   ArrowRight,
@@ -24,7 +25,6 @@ import {
   Shield,
   ShieldCheck,
   Terminal,
-  Users,
   Wallet,
   X,
   Zap,
@@ -33,6 +33,8 @@ import { Button, shortKey } from "./ui";
 import { SUPPORTED_WALLETS } from "../lib/wallet";
 import { NATIVE_SAC_TESTNET, SOROBAN_RPC_URL } from "../lib/soroban";
 import { HORIZON_URL } from "../config";
+import logoSrc from "../assets/logo_lightmode.svg";
+import logoSrcDark from "../assets/logo_darkmode.svg";
 
 interface OnboardingPageProps {
   onClose: () => void;
@@ -198,15 +200,19 @@ export function OnboardingPage({
   connecting = false,
   walletConnected,
 }: OnboardingPageProps) {
+  const { theme } = useTheme();
   const contractId = import.meta.env.VITE_SOROBAN_CONTRACT_ID || "";
   const explorerContract = (id: string) =>
     `https://stellar.expert/explorer/testnet/contract/${id}`;
 
   const handlePrimary = async () => {
-    if (!walletConnected) {
-      await onConnect();
+    try {
+      if (!walletConnected) {
+        await onConnect();
+      }
+    } finally {
+      onClose();
     }
-    onClose();
   };
 
   if (typeof document === "undefined") return null;
@@ -219,12 +225,14 @@ export function OnboardingPage({
       aria-label="StellarPay project overview"
     >
       {/* Sticky top bar */}
-      <header className="sticky top-0 z-10 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-[#091210]/90 backdrop-blur-md">
+      <header className="sticky top-0 z-10 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-[#0b1413]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3.5 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 dark:bg-emerald-500 font-black text-white dark:text-slate-950 text-sm shadow-xs">
-              S/
-            </div>
+            <img
+              src={theme === "dark" ? logoSrcDark : logoSrc}
+              alt="StellarPay"
+              className="h-9 w-auto"
+            />
             <div className="leading-tight">
               <p className="text-sm font-extrabold tracking-tight">StellarPay</p>
               <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -321,7 +329,7 @@ export function OnboardingPage({
               return (
                 <div
                   key={feat.title}
-                  className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#101a18] p-5 shadow-2xs"
+                  className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#121b19] p-5 shadow-2xs"
                 >
                   <div className="flex items-start gap-4">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60">
@@ -360,7 +368,7 @@ export function OnboardingPage({
             title="Tech stack"
             desc="The exact pieces this product is built from."
           />
-          <div className="overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#101a18] shadow-2xs">
+          <div className="overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#121b19] shadow-2xs">
             {TECH_STACK.map((t, i) => {
               const Icon = t.icon;
               return (
@@ -397,7 +405,7 @@ export function OnboardingPage({
               {SUPPORTED_WALLETS.map((w) => (
                 <div
                   key={w.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#101a18] p-3.5 shadow-2xs"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#121b19] p-3.5 shadow-2xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60">
@@ -455,7 +463,7 @@ export function OnboardingPage({
             title="Contract & network"
             desc="Live deployed addresses and endpoints on Stellar Testnet. Copy any value to inspect on Stellar Expert."
           />
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#101a18] shadow-2xs divide-y divide-slate-100 dark:divide-slate-800/80">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#121b19] shadow-2xs divide-y divide-slate-100 dark:divide-slate-800/80">
             <KVRow
               label="Payroll Contract ID"
               icon={Cpu}
@@ -501,13 +509,14 @@ export function OnboardingPage({
             title="How a payout flows"
             desc="From roster request to on-chain receipt — non-custodial end to end."
           />
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#101a18] p-5 sm:p-6 shadow-2xs">
-            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#121b19] p-5 sm:p-6 shadow-2xs">
+            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {[
-                { n: "1", t: "Roster request", d: "Bind employee salary, wallet, and cycle into one transaction.", icon: Users },
-                { n: "2", t: "Wallet signs", d: "Freighter signs the non-custodial transfer client-side.", icon: Wallet },
-                { n: "3", t: "Settles on Stellar", d: "Ledger verifies amount, recipient, and replay protection.", icon: Send },
-                { n: "4", t: "Receipt streamed", d: "Explorer-linked proof unlocks the execution stream.", icon: Terminal },
+                { n: "1", t: "Build", d: "Construct XDR with source, seq, fee, and memo.", icon: Terminal },
+                { n: "2", t: "Sign", d: "Freighter signs the non-custodial XDR client-side.", icon: Wallet },
+                { n: "3", t: "Submit", d: "Broadcast signed XDR to Horizon or Soroban RPC.", icon: Send },
+                { n: "4", t: "Confirm", d: "Stellar ledger closes (~3-5s), tx included.", icon: RefreshCw },
+                { n: "5", t: "Success", d: "Transaction hash confirmed, Explorer link returned.", icon: Check },
               ].map((s) => {
                 const Icon = s.icon;
                 return (
@@ -542,7 +551,7 @@ export function OnboardingPage({
             {PRINCIPLES.map((p) => {
               const Icon = p.icon;
               return (
-                <div key={p.title} className="bg-white dark:bg-[#101a18] p-4">
+                <div key={p.title} className="bg-white dark:bg-[#121b19] p-4">
                   <div className="flex items-center gap-2">
                     <Icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100">

@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type ReactNode, type FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, forwardRef, type ButtonHTMLAttributes, type ReactNode, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   Wallet,
@@ -17,7 +17,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import type { Employee } from "../types";
+import type { Employee, PaymentDraft } from "../types";
 import { isValidPublicKey, isValidXlmAmount } from "../lib/stellar";
 
 export function Spinner({ className = "" }: { className?: string }) {
@@ -41,16 +41,16 @@ const VARIANTS: Record<Variant, string> = {
   primary:
     "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 hover:bg-emerald-500 dark:hover:bg-emerald-400 font-bold focus-visible:ring-emerald-500 shadow-xs active:scale-[0.98]",
   secondary:
-    "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 focus-visible:ring-slate-700 shadow-2xs active:scale-[0.98]",
+    "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 focus-visible:ring-slate-700 shadow-xs active:scale-[0.98]",
   danger:
-    "bg-rose-600 text-white hover:bg-rose-500 focus-visible:ring-rose-500 shadow-2xs active:scale-[0.98]",
+    "bg-rose-600 text-white hover:bg-rose-500 focus-visible:ring-rose-500 shadow-xs active:scale-[0.98]",
   ghost:
     "bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:ring-slate-400",
   outline:
-    "border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#14201e] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 focus-visible:ring-slate-400 shadow-2xs",
+    "border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#14201e] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#1a2b28] focus-visible:ring-slate-400 shadow-xs",
 };
 
-export function Button({
+export const Button = forwardRef<HTMLButtonElement, BtnProps>(function Button({
   variant = "primary",
   loading = false,
   disabled,
@@ -58,9 +58,10 @@ export function Button({
   className = "",
   type = "button",
   ...props
-}: BtnProps) {
+}, ref) {
   return (
     <button
+      ref={ref}
       type={type}
       disabled={disabled || loading}
       className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs tracking-wide transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${VARIANTS[variant]} ${className}`}
@@ -70,7 +71,7 @@ export function Button({
       {children}
     </button>
   );
-}
+});
 
 export function Card({
   title,
@@ -87,7 +88,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#121b19] p-5 sm:p-6 shadow-xs ${className}`}
+      className={`rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#121b19] p-5 sm:p-6 shadow-2xs ${className}`}
     >
       {(title || action) && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-4">
@@ -131,7 +132,7 @@ interface WalletBarProps {
 export function WalletBar({
   address,
   balance,
-  network: _network,
+  network,
   connecting,
   loadingBalance,
   onConnect,
@@ -148,13 +149,53 @@ export function WalletBar({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const networkMeta: Record<string, { color: string; bg: string; label: string }> = {
+    TESTNET: {
+      color: "bg-emerald-500",
+      bg: "bg-slate-100 dark:bg-[#14201e]",
+      label: "Stellar Testnet",
+    },
+    WRONG: {
+      color: "bg-rose-500 animate-pulse",
+      bg: "bg-rose-50 dark:bg-rose-950/60",
+      label: "Wrong Network — switch to Testnet",
+    },
+    UNKNOWN: {
+      color: "bg-amber-500 animate-pulse",
+      bg: "bg-amber-50 dark:bg-amber-950/60",
+      label: "Network Unknown — check wallet",
+    },
+  };
+
+  const meta = networkMeta[network] ?? networkMeta.UNKNOWN;
+
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-      {/* Network Ledger Indicator Pill */}
-      <div className="flex items-center gap-2 rounded-full bg-slate-100 dark:bg-[#14201e] px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
-        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-        <span>Stellar Testnet</span>
-      </div>
+      {/* Network Indicator Pill — shows real wallet network state once connected */}
+      {!address ? (
+        <div className="flex items-center gap-2 rounded-full bg-slate-100 dark:bg-[#14201e] px-3 py-1 text-xs font-semibold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800">
+          <span className="h-2 w-2 rounded-full bg-slate-400" />
+          <span>No wallet connected</span>
+        </div>
+      ) : (
+        <div
+          className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border ${meta.bg} ${
+            network !== "TESTNET"
+              ? "border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+              : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
+          }`}
+          title={
+            network === "TESTNET"
+              ? "Connected to Stellar Testnet"
+              : network === "WRONG"
+                ? "Wallet is on the wrong network — switch to Stellar Testnet in your wallet settings"
+                : "Cannot verify wallet network — ensure your wallet is connected and on Testnet"
+          }
+        >
+          <span className={`h-2 w-2 rounded-full ${meta.color}`} />
+          <span>{meta.label}</span>
+        </div>
+      )}
 
       {/* Theme Toggle Button */}
       <button
@@ -207,7 +248,8 @@ export function WalletBar({
             <button
               onClick={onDisconnect}
               title="Disconnect wallet"
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-600 transition focus:outline-none cursor-pointer"
+              aria-label="Disconnect wallet"
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 cursor-pointer"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
@@ -380,7 +422,8 @@ export function EmployeeCard({ employee, onPay, onRemove }: EmployeeCardProps) {
           <button
             onClick={() => onRemove(employee.address)}
             title="Remove from roster"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 hover:text-rose-600 dark:hover:text-rose-400 transition"
+            aria-label={`Remove ${employee.name || "employee"} from roster`}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 hover:text-rose-600 dark:hover:text-rose-400 transition focus-visible:ring-2 focus-visible:ring-rose-400"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -414,30 +457,81 @@ export function EmployeeCard({ employee, onPay, onRemove }: EmployeeCardProps) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Pay Confirmation Modal                                                     */
+/* Pay Confirmation Modal (accessible dialog)                                 */
+/* Accepts a PaymentDraft instead of Employee for general direct transfers    */
 /* -------------------------------------------------------------------------- */
 interface PayModalProps {
-  employee: Employee;
+  draft: PaymentDraft;
   onClose: () => void;
-  onConfirm: (employee: Employee, amount: string) => Promise<boolean>;
+  onConfirm: (draft: PaymentDraft, amount: string) => Promise<boolean>;
+  balance?: string | null;
 }
 
-export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
-  const [amount, setAmount] = useState(employee.salary);
+export function PayModal({ draft, onClose, onConfirm, balance }: PayModalProps) {
+  const [amount, setAmount] = useState(draft.amount);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
+
+  // Store the last focused element before opening and restore on close
+  useEffect(() => {
+    lastFocusRef.current = document.activeElement as HTMLElement;
+    requestAnimationFrame(() => {
+      titleRef.current?.focus();
+    });
+    return () => {
+      requestAnimationFrame(() => {
+        lastFocusRef.current?.focus();
+      });
+    };
+  }, []);
+
+  // Trap focus within the modal
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Escape" && !submitting) {
+      onClose();
+      return;
+    }
+    if (e.key !== "Tab") return;
+
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+
+    const focusable = overlay.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }, [submitting, onClose]);
 
   const handlePaySubmit = async (e: FormEvent) => {
     e.preventDefault();
     setModalError(null);
 
     if (!isValidXlmAmount(amount)) {
-      setModalError("Please enter a valid salary amount.");
+      setModalError("Please enter a valid XLM amount.");
       return;
     }
 
     setSubmitting(true);
-    const success = await onConfirm(employee, amount);
+    const success = await onConfirm({ ...draft, amount }, amount);
     setSubmitting(false);
 
     if (success) {
@@ -445,22 +539,43 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
     }
   };
 
+  // Calculate balance impact
+  const balanceNum = balance ? Number(balance) : null;
+  const amountNum = Number(amount);
+  const remaining = balanceNum !== null ? balanceNum - amountNum : null;
+  const wouldDeficit = remaining !== null && remaining < 1; // 1 XLM reserve
+
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+    <div
+      ref={overlayRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pay-modal-title"
+      onKeyDown={handleKeyDown}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+    >
       <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#121b19] p-6 shadow-xl border border-slate-200/90 dark:border-slate-800 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60">
               <Send className="h-4 w-4" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Confirm Direct Payment</h3>
+            <h3
+              id="pay-modal-title"
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-base font-bold text-slate-900 dark:text-slate-100 outline-none"
+            >
+              Confirm Direct Payment
+            </h3>
           </div>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="Close payment confirmation"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:ring-2 focus-visible:ring-slate-400"
           >
             ✕
           </button>
@@ -468,33 +583,75 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
 
         <form onSubmit={handlePaySubmit} className="mt-4 space-y-4">
           {modalError && (
-            <div className="flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 p-3 text-xs font-medium text-rose-800 dark:text-rose-300">
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 p-3 text-xs font-medium text-rose-800 dark:text-rose-300"
+            >
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
               <span>{modalError}</span>
             </div>
           )}
 
           <div className="rounded-xl bg-slate-50 dark:bg-[#0b1413] p-4 space-y-2 border border-slate-100 dark:border-slate-800">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400">Recipient:</span>
-              <span className="font-bold text-slate-900 dark:text-slate-100">{employee.name || "Unnamed"}</span>
-            </div>
+            {draft.label && (
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 dark:text-slate-400">Recipient:</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100">{draft.label}</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400">Stellar Address:</span>
-              <span className="font-mono text-slate-700 dark:text-slate-300">{shortKey(employee.address)}</span>
+              <span className="font-mono text-slate-700 dark:text-slate-300 text-[10px] break-all max-w-[220px] text-right">
+                {draft.to}
+              </span>
             </div>
+            {draft.memo && (
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 dark:text-slate-400">Memo:</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{draft.memo}</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400">Network:</span>
               <span className="font-semibold text-emerald-700 dark:text-emerald-400">Stellar Testnet</span>
             </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500 dark:text-slate-400">Source:</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300 capitalize">{draft.source}</span>
+            </div>
+            {balance !== null && balance !== undefined && (
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 dark:text-slate-400">Wallet Balance:</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300">
+                    {balanceNum!.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs mt-1">
+                  <span className="text-slate-500 dark:text-slate-400">After Payment:</span>
+                  <span className={`font-mono font-bold ${wouldDeficit ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                    {remaining!.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM
+                  </span>
+                </div>
+                {wouldDeficit && (
+                  <p className="mt-1 text-[10px] text-rose-600 dark:text-rose-400">
+                    ⚠ Low balance after payment (reserve ~1 XLM)
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="pay-modal-amount"
+              className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+            >
               Payment Amount (XLM)
             </label>
             <div className="relative">
               <input
+                id="pay-modal-amount"
                 type="number"
                 step="0.0000001"
                 min="0.0000001"
@@ -526,7 +683,12 @@ export function PayModal({ employee, onClose, onConfirm }: PayModalProps) {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
+            <Button
+              ref={confirmBtnRef}
+              type="submit"
+              variant="primary"
+              loading={submitting}
+            >
               <Send className="h-4 w-4" />
               Sign & Send XLM
             </Button>

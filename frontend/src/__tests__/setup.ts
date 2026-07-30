@@ -7,7 +7,7 @@ Object.defineProperty(globalThis, "import", {
     meta: {
       env: {
         VITE_SOROBAN_CONTRACT_ID:
-          "CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY",
+          "CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV",
       },
     },
   },

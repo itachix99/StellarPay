@@ -5,6 +5,7 @@ import {
   fetchContractAdmin,
   fetchContractCycle,
   fetchIsPaused,
+  checkContractInterface,
 } from "../lib/soroban";
 
 const ADMIN = "GCWOXPHXNLGYMUAKMKXS7V6HQQJLZC7VFJQYUXQPLLCGIHA45MT5EECU";
@@ -16,6 +17,7 @@ vi.mock("../lib/soroban", () => ({
   fetchUnpaidPayroll: vi.fn().mockResolvedValue(0n),
   invokeContractCall: vi.fn(),
   subscribeToContractEvents: vi.fn(() => () => {}),
+  checkContractInterface: vi.fn().mockResolvedValue({ compatible: true, exists: true, message: "ok" }),
   xlmToStroops: (xlm: string) => BigInt(Math.round(parseFloat(xlm) * 10_000_000)),
   stroopsToXlm: (stroops: bigint) => (Number(stroops) / 10_000_000).toFixed(4),
   NATIVE_SAC_TESTNET: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
@@ -31,6 +33,11 @@ describe("SorobanDashboard", () => {
     vi.mocked(fetchContractAdmin).mockResolvedValue(null);
     vi.mocked(fetchContractCycle).mockResolvedValue(0);
     vi.mocked(fetchIsPaused).mockResolvedValue(false);
+    vi.mocked(checkContractInterface).mockResolvedValue({
+      compatible: true,
+      exists: true,
+      message: "Contract supports the current payroll interface.",
+    });
   });
 
   describe("smoke test", () => {
@@ -46,7 +53,7 @@ describe("SorobanDashboard", () => {
       render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
       const input = screen.getByPlaceholderText(/e\.g\. C\.\.\./i);
       expect(input).toBeInTheDocument();
-      expect(input).toHaveValue("CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY");
+      expect(input).toHaveValue("CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV");
     });
 
     it("shows payroll cycle display", () => {
@@ -72,6 +79,19 @@ describe("SorobanDashboard", () => {
       await waitFor(() => {
         expect(screen.getByText("Initialize Contract")).toBeInTheDocument();
       });
+    });
+
+    it("disables initialization for an incompatible deployed ABI", async () => {
+      vi.mocked(checkContractInterface).mockResolvedValue({
+        compatible: false,
+        exists: true,
+        message: "Configured contract does not support the current payroll ABI.",
+      });
+
+      render(<SorobanDashboard userAddress={ADMIN} network="TESTNET" />);
+
+      expect(await screen.findByText(/does not support the current payroll ABI/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Initialize Contract/i })).toBeDisabled();
     });
   });
 

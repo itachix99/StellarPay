@@ -331,6 +331,87 @@ export function parseContractEvent(raw: {
   return event;
 }
 
+// ---------------------------------------------------------------------------
+// ABI Compatibility Check — verify a deployed contract supports the interface
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of checking a contract's ABI compatibility.
+ */
+export interface ContractCompatibility {
+  /** true if the contract supports all expected functions */
+  compatible: boolean;
+  /** true if the contract address exists on-chain at all */
+  exists: boolean;
+  /** human-readable status message */
+  message: string;
+}
+
+const REQUIRED_READ_METHODS = ["get_token", "is_paused", "get_unpaid_payroll"] as const;
+
+function contractErrorCode(error: string): number | null {
+  const match = error.match(/ContractError\(#(\d+)\)/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+/**
+ * Check whether a deployed contract supports the expected Payroll interface.
+ *
+ * Probes read methods introduced by the current payroll ABI. The previous
+ * deployment also had `get_admin`, so checking that method alone cannot detect
+ * the version mismatch that causes `initialize` to reject two arguments.
+ */
+export async function checkContractInterface(
+  contractId: string,
+): Promise<ContractCompatibility> {
+  if (!contractId) {
+    return { compatible: false, exists: false, message: "No contract ID configured." };
+  }
+
+  try {
+    const contract = new Contract(contractId);
+
+    for (const method of REQUIRED_READ_METHODS) {
+      const tx = new TransactionBuilder(simulationAccount(), {
+        fee: BASE_FEE,
+        networkPassphrase: NETWORK_PASSPHRASE,
+      })
+        .addOperation(contract.call(method))
+        .setTimeout(30)
+        .build();
+
+      const sim = await sorobanServer.simulateTransaction(tx);
+      if (rpc.Api.isSimulationSuccess(sim)) continue;
+
+      const error = sim.error ?? "";
+      // get_token returns NotInitialized before initialization. That proves the
+      // method exists and is the expected outcome for a fresh deployment.
+      if (method === "get_token" && contractErrorCode(error) === 2) continue;
+
+      const missingContract = /missing.*contract|no contract|contract.*not found/i.test(error);
+      return {
+        compatible: false,
+        exists: !missingContract,
+        message: missingContract
+          ? "No contract found at this address on Testnet. Deploy a new contract first."
+          : `Configured contract does not support the current payroll ABI (${method} probe failed).`,
+      };
+    }
+
+    return {
+      compatible: true,
+      exists: true,
+      message: "Contract supports the current payroll interface.",
+    };
+  } catch (err) {
+    return {
+      compatible: false,
+      exists: false,
+      message: err instanceof Error ? err.message : "Failed to check contract compatibility.",
+    };
+  }
+}
+
 /**
  * Subscribe to contract events from the Soroban RPC.
  *

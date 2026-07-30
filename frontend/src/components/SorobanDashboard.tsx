@@ -11,6 +11,7 @@ import {
   fetchIsPaused,
   fetchUnpaidPayroll,
   subscribeToContractEvents,
+  checkContractInterface,
   xlmToStroops,
   stroopsToXlm,
   NATIVE_SAC_TESTNET,
@@ -43,7 +44,7 @@ interface SorobanDashboardProps {
   network?: string;
 }
 
-export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
+export function SorobanDashboard({ userAddress, network }: SorobanDashboardProps) {
   const { push } = useToast();
 
   const [contractId, setContractId] = useState(
@@ -55,6 +56,11 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
   const [unpaidXlm, setUnpaidXlm] = useState<string>("0.0000");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // ABI compatibility guard
+  const [compatChecked, setCompatChecked] = useState(false);
+  const [compatMessage, setCompatMessage] = useState<string | null>(null);
+  const [compatOk, setCompatOk] = useState(false);
 
   // Contract Employee Input Form State
   const [empAddress, setEmpAddress] = useState("");
@@ -144,6 +150,29 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
       unsub();
       unsubscribeRef.current = null;
       setIsLive(false);
+    };
+  }, [contractId]);
+
+  // Check ABI compatibility when contractId changes
+  useEffect(() => {
+    if (!contractId || !isValidContractId(contractId)) {
+      setCompatChecked(false);
+      setCompatMessage(null);
+      setCompatOk(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCompatChecked(false);
+    checkContractInterface(contractId).then((result) => {
+      if (cancelled) return;
+      setCompatChecked(true);
+      setCompatOk(result.compatible);
+      setCompatMessage(result.message);
+    });
+
+    return () => {
+      cancelled = true;
     };
   }, [contractId]);
 
@@ -393,7 +422,7 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
   };
 
   return (
-    <Card className="border-emerald-200/80 dark:border-emerald-900/60 bg-gradient-to-b from-white to-emerald-50/20 dark:from-slate-900 dark:to-slate-900/95">
+    <Card className="border-emerald-200/80 dark:border-emerald-900/60 bg-white dark:bg-[#121b19]">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-3">
@@ -433,8 +462,20 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
         </div>
       </div>
 
+      {/* Network warning banner */}
+      {network && network !== "TESTNET" && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 p-3 text-xs font-medium text-rose-800 dark:text-rose-300">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+          <span>
+            {network === "WRONG"
+              ? "Your wallet is on the wrong network. Soroban contract actions require Stellar Testnet."
+              : "Unable to verify your wallet network. Ensure your wallet is connected to Stellar Testnet before using Soroban features."}
+          </span>
+        </div>
+      )}
+
       {/* Contract Configuration Bar */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-12 items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-12 items-center bg-white dark:bg-[#14201e] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
         <div className="sm:col-span-8">
           <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
             Deployed Soroban Contract ID (Stellar Testnet C...)
@@ -480,8 +521,24 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
         </div>
       </div>
 
+      {/* ABI Compatibility Warning */}
+      {contractId && contractIdValid && compatChecked && !compatOk && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 p-3 text-xs font-medium text-rose-800 dark:text-rose-300">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+          <span>{compatMessage ?? "Configured contract is an incompatible payroll version. Deploy or configure the current contract."}</span>
+        </div>
+      )}
+
+      {/* Compatibility Check Pending */}
+      {contractId && contractIdValid && !compatChecked && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/60 p-3 text-xs font-medium text-slate-600 dark:text-slate-400">
+          <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+          <span>Checking contract compatibility...</span>
+        </div>
+      )}
+
       {/* If contract is not deployed/initialized */}
-      {!adminAddress && contractId && contractIdValid && (
+      {!adminAddress && contractId && contractIdValid && compatChecked && (
         <div className="mt-4 flex items-center justify-between rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800/80 p-4 text-xs text-amber-900 dark:text-amber-200 shadow-2xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -491,10 +548,19 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
             variant="primary"
             className="py-1.5 px-3 text-xs"
             onClick={handleInitialize}
+            disabled={!compatOk}
             loading={submitting}
           >
             Initialize Contract
           </Button>
+        </div>
+      )}
+
+      {/* Contract not found — no compatible contract */}
+      {!adminAddress && contractId && contractIdValid && !compatChecked && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/60 p-3 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+          <span>Checking on-chain contract state...</span>
         </div>
       )}
 
@@ -503,7 +569,7 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
         {/* Admin safety controls */}
         {isAdmin && (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
+            <div className="bg-white dark:bg-[#121b19] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Emergency Pause</h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -530,7 +596,7 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
 
             <form
               onSubmit={handleWithdraw}
-              className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs space-y-2"
+              className="bg-white dark:bg-[#121b19] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-2"
             >
               <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                 <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -563,7 +629,7 @@ export function SorobanDashboard({ userAddress }: SorobanDashboardProps) {
 
         {/* Add Employee Form for Smart Contract */}
         {isAdmin && (
-          <form onSubmit={handleAddEmployeeContract} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 space-y-3 shadow-2xs">
+          <form onSubmit={handleAddEmployeeContract} className="bg-white dark:bg-[#121b19] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-2xs">
             <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
               <PlusCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               Add Employee to On-Chain Smart Contract Roster

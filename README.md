@@ -2,7 +2,7 @@
 
 **StellarPay** is a decentralized payroll and salary distribution platform built on **Stellar Testnet** with a **Soroban smart contract**. It allows employers to manage employee rosters, execute direct or bulk XLM salary payments, and track payroll cycles — all from a mobile-responsive web app with non-custodial wallet signing.
 
-> **Quick Stats:** 8 wallets supported | 36 frontend tests | 10 Soroban event types | 3 custom error classes | CI/CD pipeline
+> **Quick Stats:** 8 wallets supported | 67 frontend tests | 10 Soroban event types | 3 custom error classes | CI/CD pipeline
 
 ### Tech Stack
 
@@ -24,10 +24,10 @@
 
 | Field | Value |
 |---|---|
-| **Contract ID** | `CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY` |
+| **Contract ID** | `CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV` |
 | **Soroban RPC** | `https://soroban-testnet.stellar.org` |
 | **Horizon** | `https://horizon-testnet.stellar.org` |
-| **Explorer** | [View on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY) |
+| **Explorer** | [View on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV) |
 | **Package** | `stellarpay-payroll` v0.1.0 |
 | **Native SAC (pinned token)** | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
 
@@ -94,6 +94,34 @@
 - **Emergency pause** — Contract admin can pause payroll operations
 - **Transaction feedback** — Toast notifications with Stellar Expert links
 - **Mobile-responsive UI** — Dark/light theme with Tailwind CSS
+
+---
+
+## Product Walkthrough
+
+### 1. Connect a supported wallet
+
+Open the wallet selector to connect Freighter, xBull, Albedo, or another supported Stellar wallet. The application keeps signing non-custodial: account access and transaction approval remain inside the selected wallet.
+
+![StellarPay wallet connection modal showing supported Stellar wallets](frontend/src/assets/wallet_connect.png)
+
+### 2. Review the connected payroll console
+
+After connecting on Stellar Testnet, the console displays the active network, employer XLM balance, local roster size, and monthly payroll total. Direct XLM transfers, Soroban contract payroll, and employee management remain separate workflows.
+
+![StellarPay connected dashboard with wallet balance and payroll controls](frontend/src/assets/wallet_connected.png)
+
+### 3. Review and authorize a direct payment
+
+Before submission, StellarPay presents the complete recipient address, network, payment source, current wallet balance, and projected balance. The connected wallet must explicitly sign before the XLM payment is broadcast.
+
+![Direct XLM payment confirmation dialog with recipient and balance details](frontend/src/assets/payment.png)
+
+### 4. Verify settlement on-chain
+
+Once the ledger confirms the transaction, the dashboard shows the recipient, amount, updated wallet balance, and a direct Stellar Expert receipt link. The recipient is paid directly without being added to or changing the employee roster.
+
+![Successful direct XLM payment with transaction receipt and Stellar Expert link](frontend/src/assets/payment_done.png)
 
 ---
 
@@ -192,11 +220,11 @@ Every async path has try/catch with descriptive error messages surfaced to the u
 
 | Detail | Value |
 |---|---|
-| Contract ID | `CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY` |
+| Contract ID | `CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV` |
 | Package | `stellarpay-payroll` v0.1.0 |
 | Soroban SDK | 27.0.0 |
 | Deploy script | `scripts/deploy.sh` — builds WASM, deploys via `stellar contract deploy`, optionally initializes |
-| Explorer | [View on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY) |
+| Explorer | [View on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV) |
 
 ### 3. Contract Called from the Frontend
 
@@ -271,7 +299,7 @@ The frontend subscribes to on-chain contract events via `subscribeToContractEven
 ### Step 1: Verify Contract Deployment
 
 Open the Stellar Expert link to confirm the contract is deployed on Testnet:
-[View Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY)
+[View Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV)
 
 ### Step 2: Run Smart Contract Tests
 
@@ -333,7 +361,7 @@ Click "Connect Wallet" — the StellarWalletsKit modal should show all 8 support
 
 ## Useful Links
 
-- [Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CD4GDOOKY7NBXFL7UCSQGVQ4FE62P42TVGMTCBBJYD5ZMOOI7JDJM5LY)
+- [Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV)
 - [Stellar Testnet](https://stellar.org/developers/tools)
 - [Freighter Wallet](https://www.freighter.app/)
 - [Soroban Documentation](https://soroban.stellar.org/)

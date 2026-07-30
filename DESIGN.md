@@ -54,7 +54,7 @@ components:
 StellarPay embodies a high-precision, non-custodial financial dashboard aesthetic. Built with clean slate neutrals and vibrant emerald/teal accents, the design communicates security, transparency, and instant settlement clarity. The interface rejects dark-mode clichés, noisy purple gradients, and decorative glassmorphism blurs in favor of crisp borders, high-contrast typography, and purposeful micro-interactions.
 
 ### Key Characteristics:
-- **Dual-Theme Foundation**: Off-white canvas (`#f8fafc` / `dark:bg-slate-950`) paired with crisp card containers (`#ffffff` / `dark:bg-slate-900`) and refined slate borders (`#e2e8f0` / `dark:border-slate-800`).
+- **Dual-Theme Foundation**: Off-white canvas (`#f8fafc` / `dark:#0b1413`) paired with crisp card containers (`#ffffff` / `dark:#121b19`) and refined slate borders (`#e2e8f0` / `dark:border-slate-800`).
 - **Emerald Settlement Accent**: `#059669` carries authority for active states, balances, and action triggers in both Light and Dark modes.
 - **StellarWalletKit Modal**: Clean multi-wallet selector supporting Freighter, Albedo, xBull, and Lobstr.
 - **Micro-Feedback**: Every transaction, contract invocation, and wallet status emits immediate feedback via toasts or status streams.
@@ -89,6 +89,8 @@ The StellarPay palette relies on a restrained emerald-teal accent paired with a 
 - **Title** (Font Weight: 600, Size: 0.875rem / 14px, Line Height: 1.4): Employee names, card headers, form label titles.
 - **Body** (Font Weight: 400, Size: 0.875rem / 14px, Line Height: 1.5): Standard paragraphs, transaction feedback messages.
 - **Label / Mono** (Font Weight: 500, Size: 0.75rem / 12px, Font Family: monospace): Stellar public keys, contract IDs, and transaction hashes.
+- **Compact** (Font Weight: 600, Size: 0.6875rem / 11px, Line Height: 1.3): Status badges, helper text, secondary metadata.
+- **Micro** (Font Weight: 500, Size: 0.625rem / 10px, Line Height: 1.2): Unit suffixes (XLM), copy-chip labels, uppercase category headers.
 
 ## 4. Elevation
 
