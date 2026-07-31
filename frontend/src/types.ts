@@ -1,5 +1,8 @@
 // Shared types for StellarPay.
 
+/** Top-level application sections selectable from the sidebar. */
+export type SectionId = "overview" | "direct" | "soroban" | "roster";
+
 export interface Employee {
   /** Stellar public key (G...) — used as the unique id. */
   address: string;

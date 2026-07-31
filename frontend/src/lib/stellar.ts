@@ -225,20 +225,55 @@ export async function sendXlm(params: {
   }
 }
 
-/** Fund an account via Friendbot (testnet convenience). */
-export async function fundWithFriendbot(address: string): Promise<void> {
-  const res = await fetch(`${FRIENDBOT_URL}/?addr=${encodeURIComponent(address)}`);
-  if (!res.ok) {
+/** Outcome of a Friendbot funding attempt. */
+export type FriendbotResult = "funded" | "already-funded";
+
+/** Abort friendbot requests that hang so the UI never gets stuck "Funding…". */
+const FRIENDBOT_TIMEOUT_MS = 15000;
+
+/**
+ * Fund an account via Friendbot (testnet convenience).
+ *
+ * Returns "funded" when XLM was actually granted, or "already-funded" when the
+ * account already has the starting balance (Friendbot returns HTTP 400 for
+ * that case). Any other failure throws a StellarError so callers can show a
+ * real error instead of a misleading success.
+ */
+export async function fundWithFriendbot(address: string): Promise<FriendbotResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FRIENDBOT_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${FRIENDBOT_URL}/?addr=${encodeURIComponent(address)}`, {
+      signal: controller.signal,
+    });
+    if (res.ok) return "funded";
+
     if (res.status === 400) {
-      try {
-        const body = await res.json();
-        if (body?.extras?.error?.includes("already exists")) return;
-      } catch {
-        // If we can't parse the body, assume it's the "already exists" case
+      // Friendbot rejects with 400 when the account already has funds.
+      // Any other 400 (bad address, rate limit, …) is a real failure.
+      const body = (await res.json().catch(() => null)) as
+        | { detail?: string; extras?: { error?: string; reason?: string } }
+        | null;
+      const detail = body?.detail ?? body?.extras?.error ?? body?.extras?.reason ?? "";
+      if (/already (exists|funded)/i.test(String(detail))) {
+        return "already-funded";
       }
-      return;
+      throw new StellarError("Friendbot rejected the request. Try again in a moment.");
     }
+
     throw new StellarError("Friendbot funding failed. Try again in a moment.");
+  } catch (e) {
+    if (e instanceof StellarError) throw e;
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new StellarError(
+        "Friendbot request timed out. Check your connection and try again.",
+      );
+    }
+    throw new StellarError(
+      "Failed to reach Friendbot. Check your connection and try again.",
+    );
+  } finally {
+    clearTimeout(timer);
   }
 }
 

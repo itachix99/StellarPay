@@ -60,6 +60,40 @@ html.dark body {
   }
 }
 
+/* Drawer / overlay micro-interactions.
+   The mobile nav drawer and its backdrop use `animate-in`, `fade-in` and
+   `slide-in-from-left` utility classes (tailwindcss-animate naming). Those
+   utilities aren't shipped by Tailwind v4 core, so define them here so the
+   classes actually animate. The global reduced-motion rule above shortens
+   both to ~0ms for users who opt out. */
+@keyframes sp-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sp-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-in {
+  animation: sp-fade-in 150ms ease-out both;
+}
+
+.animate-in.slide-in-from-left {
+  animation: sp-slide-in-left 200ms ease-out both;
+}
+
 /* Tabular numbers for financial balances & figures */
 .tabular-nums {
   font-variant-numeric: tabular-nums;

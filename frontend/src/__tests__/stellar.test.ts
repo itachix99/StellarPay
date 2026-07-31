@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   isValidPublicKey,
   isValidContractId,
@@ -6,6 +6,8 @@ import {
   parsePositiveXlm,
   xlmToStroops,
   stroopsToXlm,
+  fundWithFriendbot,
+  StellarError,
 } from "../lib/stellar";
 import {
   xlmToStroops as sorobanXlmToStroops,
@@ -77,5 +79,82 @@ describe("Stellar Validation & Unit Conversion Helpers", () => {
   it("converts stroops to XLM with fractional precision", () => {
     expect(stroopsToXlm(1_234_567n)).toBe("0.1234");
     expect(stroopsToXlm(10_000_001n)).toBe("1.0000"); // display truncates to 4 decimals
+  });
+});
+
+describe("fundWithFriendbot", () => {
+  const addr = "GCWOXPHXNLGYMUAKMKXS7V6HQQJLZC7VFJQYUXQPLLCGIHA45MT5EECU";
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns "funded" when friendbot succeeds (200)', async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ successful: true }), { status: 200 })),
+    );
+    await expect(fundWithFriendbot(addr)).resolves.toBe("funded");
+  });
+
+  it('returns "already-funded" when the account already has testnet funds (400)', async () => {
+    // Real friendbot response shape for an already-funded account.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ detail: "account already funded to starting balance" }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    await expect(fundWithFriendbot(addr)).resolves.toBe("already-funded");
+  });
+
+  it("throws when friendbot rejects for an unrelated reason (400)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ extras: { invalid_field: "addr", reason: "invalid address" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    await expect(fundWithFriendbot(addr)).rejects.toThrow(StellarError);
+  });
+
+  it("throws when the network request fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    await expect(fundWithFriendbot(addr)).rejects.toThrow(StellarError);
+  });
+
+  it("maps an aborted/timed-out friendbot request to a friendly error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new DOMException("Aborted", "AbortError");
+      }),
+    );
+    await expect(fundWithFriendbot(addr)).rejects.toThrow(/timed out/i);
+  });
+
+  it("passes an abort signal so a hung friendbot request can be cancelled", async () => {
+    let signal: AbortSignal | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, opts?: RequestInit) => {
+        signal = opts?.signal ?? null;
+        return new Response(JSON.stringify({ successful: true }), { status: 200 });
+      }),
+    );
+    await fundWithFriendbot(addr);
+    expect(signal).not.toBeNull();
+    expect(signal!.aborted).toBe(false);
   });
 });
