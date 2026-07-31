@@ -131,29 +131,41 @@ Once the ledger confirms the transaction, the dashboard shows the recipient, amo
 
 ### Desktop
 
-| Home | App | Guide | History |
-|---|---|---|---|
-| ![Desktop home](frontend/src/assets/Desktop%20home.png) | ![Desktop app](frontend/src/assets/Desktop%20app.png) | ![Desktop guide](frontend/src/assets/Desktop%20guide.png) | ![Desktop history](frontend/src/assets/Desktop%20history.png) |
+<p align="center">
+  <img src="frontend/src/assets/Desktop%20home.png" width="48%" alt="Desktop home" />
+  <img src="frontend/src/assets/Desktop%20app.png" width="48%" alt="Desktop app" />
+</p>
 
-| Wallet Options | Wallet Connected | Wallet Balance |
-|---|---|---|
-| ![Wallet Options](frontend/src/assets/Wallet%20Options.png) | ![Wallet Connected](frontend/src/assets/wallet_connected.png) | ![Wallet Balance](frontend/src/assets/payment.png) |
+<p align="center">
+  <img src="frontend/src/assets/Desktop%20guide.png" width="48%" alt="Desktop guide" />
+  <img src="frontend/src/assets/Desktop%20history.png" width="48%" alt="Desktop history" />
+</p>
+
+<p align="center">
+  <img src="frontend/src/assets/Wallet%20Options.png" width="48%" alt="Wallet Options" />
+  <img src="frontend/src/assets/wallet_connected.png" width="48%" alt="Wallet Connected" />
+</p>
 
 ### Mobile
 
-| Home | App | Guide | History |
-|---|---|---|---|
-| ![Mobile home](frontend/src/assets/Mobile%20home.png) | ![Mobile app](frontend/src/assets/Mobile%20app.png) | ![Mobile guide](frontend/src/assets/Mobile%20guide.png) | ![Mobile history](frontend/src/assets/Mobile%20history.png) |
+<p align="center">
+  <img src="frontend/src/assets/Mobile%20home.png" width="23%" alt="Mobile home" />
+  <img src="frontend/src/assets/Mobile%20app.png" width="23%" alt="Mobile app" />
+  <img src="frontend/src/assets/Mobile%20guide.png" width="23%" alt="Mobile guide" />
+  <img src="frontend/src/assets/Mobile.png" width="23%" alt="Mobile" />
+</p>
 
-| Mobile | Wallet Options |
-|---|---|
-| ![Mobile](frontend/src/assets/Mobile.png) | ![Mobile Wallet Options](frontend/src/assets/Mobile%20Wallet%20Options.png) |
+<p align="center">
+  <img src="frontend/src/assets/Mobile%20history.png" width="30%" alt="Mobile history" />
+  <img src="frontend/src/assets/Mobile%20Wallet%20Options.png" width="30%" alt="Mobile Wallet Options" />
+</p>
 
 ### CI/CD & Tests
 
-| CI Pipeline | Test Output |
-|---|---|
-| ![CI Pipeline](frontend/src/assets/CI%20Pipeline.png) | ![Test Output](frontend/src/assets/Test%20Output.png) |
+<p align="center">
+  <img src="frontend/src/assets/CI%20Pipeline.png" width="48%" alt="CI Pipeline" />
+  <img src="frontend/src/assets/Test%20Output.png" width="48%" alt="Test Output" />
+</p>
 
 ---
 
