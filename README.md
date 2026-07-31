@@ -132,32 +132,20 @@ Once the ledger confirms the transaction, the dashboard shows the recipient, amo
 ### Desktop
 
 <p align="center">
-  <img src="frontend/src/assets/Desktop%20home.png" width="48%" alt="Desktop home" />
-  <img src="frontend/src/assets/Desktop%20app.png" width="48%" alt="Desktop app" />
+  <img src="frontend/src/assets/Wallet%20Options.png" width="48%" alt="Wallet connection modal" />
+  <img src="frontend/src/assets/wallet_connected.png" width="48%" alt="Connected dashboard" />
 </p>
 
 <p align="center">
-  <img src="frontend/src/assets/Desktop%20guide.png" width="48%" alt="Desktop guide" />
-  <img src="frontend/src/assets/Desktop%20history.png" width="48%" alt="Desktop history" />
-</p>
-
-<p align="center">
-  <img src="frontend/src/assets/Wallet%20Options.png" width="48%" alt="Wallet Options" />
-  <img src="frontend/src/assets/wallet_connected.png" width="48%" alt="Wallet Connected" />
+  <img src="frontend/src/assets/payment.png" width="48%" alt="Payment confirmation" />
+  <img src="frontend/src/assets/payment_done.png" width="48%" alt="Payment success" />
 </p>
 
 ### Mobile
 
 <p align="center">
-  <img src="frontend/src/assets/Mobile%20home.png" width="23%" alt="Mobile home" />
-  <img src="frontend/src/assets/Mobile%20app.png" width="23%" alt="Mobile app" />
-  <img src="frontend/src/assets/Mobile%20guide.png" width="23%" alt="Mobile guide" />
-  <img src="frontend/src/assets/Mobile.png" width="23%" alt="Mobile" />
-</p>
-
-<p align="center">
-  <img src="frontend/src/assets/Mobile%20history.png" width="30%" alt="Mobile history" />
-  <img src="frontend/src/assets/Mobile%20Wallet%20Options.png" width="30%" alt="Mobile Wallet Options" />
+  <img src="frontend/src/assets/Mobile.png" width="30%" alt="Mobile responsive UI" />
+  <img src="frontend/src/assets/Mobile%20Wallet%20Options.png" width="30%" alt="Mobile wallet modal" />
 </p>
 
 ### CI/CD & Tests
