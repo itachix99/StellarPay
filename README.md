@@ -129,26 +129,14 @@ Once the ledger confirms the transaction, the dashboard shows the recipient, amo
 
 ## Screenshots
 
-### Desktop
-
-<p align="center">
-  <img src="frontend/src/assets/Wallet%20Options.png" width="48%" alt="Wallet connection modal" />
-  <img src="frontend/src/assets/wallet_connected.png" width="48%" alt="Connected dashboard" />
-</p>
-
-<p align="center">
-  <img src="frontend/src/assets/payment.png" width="48%" alt="Payment confirmation" />
-  <img src="frontend/src/assets/payment_done.png" width="48%" alt="Payment success" />
-</p>
-
-### Mobile
+### Mobile Responsive UI
 
 <p align="center">
   <img src="frontend/src/assets/Mobile.png" width="30%" alt="Mobile responsive UI" />
   <img src="frontend/src/assets/Mobile%20Wallet%20Options.png" width="30%" alt="Mobile wallet modal" />
 </p>
 
-### CI/CD & Tests
+### CI/CD Pipeline & Test Output
 
 <p align="center">
   <img src="frontend/src/assets/CI%20Pipeline.png" width="48%" alt="CI Pipeline" />
