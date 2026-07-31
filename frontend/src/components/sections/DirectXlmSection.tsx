@@ -67,8 +67,15 @@ export function DirectXlmSection({
                   MPP / Stellar testnet
                 </p>
               </div>
-              <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                READY
+              <span
+                className={`rounded px-2 py-0.5 font-mono text-[10px] font-bold ${
+                  disabled
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300"
+                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                }`}
+                title={disabled ? (disabledReason ?? "Payment unavailable") : undefined}
+              >
+                {disabled ? "UNAVAILABLE" : "READY"}
               </span>
             </div>
 
@@ -100,7 +107,7 @@ export function DirectXlmSection({
                 Transaction result
               </span>
               <span className="font-mono text-[10px] text-slate-400">
-                verified on-chain
+                {lastPayment ? "verified on-chain" : "awaiting confirmation"}
               </span>
             </div>
 

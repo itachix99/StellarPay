@@ -118,10 +118,12 @@ export function OverviewSection({
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })
-                : "0.00"}{" "}
-              <span className="text-xs font-normal text-emerald-700 dark:text-emerald-300">
-                XLM
-              </span>
+                : "—"}{" "}
+              {balance !== null && (
+                <span className="text-xs font-normal text-emerald-700 dark:text-emerald-300">
+                  XLM
+                </span>
+              )}
             </p>
             <button
               type="button"

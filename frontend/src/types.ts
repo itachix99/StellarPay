@@ -84,6 +84,8 @@ export interface EventSubscriptionOptions {
   limit?: number;
   /** Called for each new event batch. */
   onEvents: (events: ContractEvent[]) => void;
+  /** Called on each successful poll, even when no new events arrived. */
+  onPollSuccess?: () => void;
   /** Called on subscription error. */
   onError?: (error: Error) => void;
 }

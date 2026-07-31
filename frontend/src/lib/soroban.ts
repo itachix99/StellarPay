@@ -435,6 +435,7 @@ export function subscribeToContractEvents(
     pollIntervalMs = 5000,
     limit = 20,
     onEvents,
+    onPollSuccess,
     onError,
   } = options;
 
@@ -484,6 +485,7 @@ export function subscribeToContractEvents(
 
       // Reset backoff on successful poll
       currentInterval = pollIntervalMs;
+      onPollSuccess?.();
     } catch (err) {
       if (!stopped && onError) {
         onError(err instanceof Error ? err : new Error(String(err)));

@@ -16,7 +16,7 @@ export function ToastViewport() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          role="status"
+          role={t.kind === "error" ? "alert" : "status"}
           className={`pointer-events-auto w-full max-w-sm rounded-2xl border p-4 text-xs backdrop-blur-xs transition-all duration-200 animate-in slide-in-from-bottom-2 ${STYLES[t.kind]}`}
         >
           <div className="flex items-start justify-between gap-3">

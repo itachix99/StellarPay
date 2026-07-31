@@ -1,7 +1,7 @@
 // Project onboarding overview — first-run information surface for StellarPay.
 // Surfaces what the product does, the tech stack, supported wallets, the
 // deployed contract address, security posture, and quick-start steps.
-import { useState, type ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import { useTheme } from "../hooks/useTheme";
 import { createPortal } from "react-dom";
 import {
@@ -29,7 +29,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { Button, shortKey } from "./ui";
+import { Button, shortKey, useDialogFocus } from "./ui";
 import { SUPPORTED_WALLETS } from "../lib/wallet";
 import { NATIVE_SAC_TESTNET, SOROBAN_RPC_URL } from "../lib/soroban";
 import { HORIZON_URL } from "../config";
@@ -215,10 +215,18 @@ export function OnboardingPage({
     }
   };
 
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const primaryBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Full-page overlay gets the same focus capture/trap, scroll lock, Escape
+  // close, and focus restore as the other dialogs.
+  useDialogFocus({ containerRef: overlayRef, onClose, initialFocusRef: primaryBtnRef });
+
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-[90] overflow-y-auto bg-[#f3f5f4] dark:bg-[#0b1413] text-slate-900 dark:text-slate-100 antialiased animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
@@ -272,6 +280,7 @@ export function OnboardingPage({
 
           <div className="mt-7 flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <Button
+              ref={primaryBtnRef}
               onClick={handlePrimary}
               loading={connecting}
               variant="primary"

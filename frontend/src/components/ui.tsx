@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, type ButtonHTMLAttributes, type ReactNode, type FormEvent } from "react";
+import { useState, useRef, useEffect, forwardRef, type ButtonHTMLAttributes, type ReactNode, type FormEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
   Wallet,
@@ -221,11 +221,21 @@ export function WalletBar({
             {loadingBalance ? (
               <Spinner className="text-slate-400" />
             ) : (
-              <span className="tabular-nums font-mono">
+              <span
+                className="tabular-nums font-mono"
+                title={balance === null ? "Balance could not be loaded" : undefined}
+              >
                 <strong className="font-bold text-slate-900 dark:text-slate-100">
-                  {balance !== null ? Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                  {balance !== null
+                    ? Number(balance).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
+                    : "—"}
                 </strong>{" "}
-                <span className="text-[10px] text-slate-500 font-sans">XLM</span>
+                {balance !== null && (
+                  <span className="text-[10px] text-slate-500 font-sans">XLM</span>
+                )}
               </span>
             )}
           </div>
@@ -457,6 +467,167 @@ export function EmployeeCard({ employee, onPay, onRemove }: EmployeeCardProps) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Accessible modal behavior — shared by PayModal, the disconnect confirm,    */
+/* and the onboarding overlay.                                                */
+/* -------------------------------------------------------------------------- */
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusable(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+}
+
+interface DialogFocusOptions {
+  containerRef: RefObject<HTMLElement | null>;
+  onClose?: () => void;
+  /** Allow Escape to close. Read live so callers can guard while submitting. */
+  closeOnEscape?: boolean;
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  restoreFocus?: boolean;
+}
+
+/**
+ * Locks body scroll, moves focus into the dialog, traps Tab inside it, closes
+ * on Escape, and returns focus to the previously focused element on unmount.
+ * Runs once per mount — dialogs mount on open and unmount on close.
+ */
+export function useDialogFocus({
+  containerRef,
+  onClose,
+  closeOnEscape = true,
+  initialFocusRef,
+  restoreFocus = true,
+}: DialogFocusOptions) {
+  const lastFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const closeOnEscapeRef = useRef(closeOnEscape);
+
+  // Keep the latest callbacks without re-running the mount-only effect.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    closeOnEscapeRef.current = closeOnEscape;
+  });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    lastFocusRef.current = document.activeElement as HTMLElement;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    requestAnimationFrame(() => {
+      if (initialFocusRef?.current) {
+        initialFocusRef.current.focus();
+      } else {
+        getFocusable(container)[0]?.focus();
+      }
+    });
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (closeOnEscapeRef.current) {
+          e.stopPropagation();
+          onCloseRef.current?.();
+        }
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const focusable = getFocusable(container);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      // Redirect when focus leaves the dialog (e.g. a control disabled itself).
+      const inside = container.contains(active);
+      if (e.shiftKey) {
+        if (active === first || !inside) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !inside) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = prevOverflow;
+      if (restoreFocus) lastFocusRef.current?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
+interface ModalProps {
+  onClose: () => void;
+  children: ReactNode;
+  /** id of the element that names this dialog (its title). */
+  labelledBy?: string;
+  /** fallback label when there is no labelledBy element. */
+  ariaLabel?: string;
+  closeOnEscape?: boolean;
+  closeOnBackdrop?: boolean;
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  restoreFocus?: boolean;
+  overlayClassName?: string;
+  panelClassName?: string;
+}
+
+/**
+ * Portal dialog with focus capture, Tab trapping, scroll lock, Escape/backdrop
+ * close, and focus restore. Content goes inside `panelClassName`.
+ */
+export function Modal({
+  onClose,
+  children,
+  labelledBy,
+  ariaLabel,
+  closeOnEscape = true,
+  closeOnBackdrop = false,
+  initialFocusRef,
+  restoreFocus = true,
+  overlayClassName = "",
+  panelClassName = "",
+}: ModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useDialogFocus({
+    containerRef: overlayRef,
+    onClose,
+    closeOnEscape,
+    initialFocusRef,
+    restoreFocus,
+  });
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={labelledBy}
+      aria-label={ariaLabel}
+      className={overlayClassName}
+      onClick={(e) => {
+        if (closeOnBackdrop && e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className={panelClassName}>{children}</div>
+    </div>,
+    document.body
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Pay Confirmation Modal (accessible dialog)                                 */
 /* Accepts a PaymentDraft instead of Employee for general direct transfers    */
 /* -------------------------------------------------------------------------- */
@@ -471,55 +642,7 @@ export function PayModal({ draft, onClose, onConfirm, balance }: PayModalProps) 
   const [amount, setAmount] = useState(draft.amount);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const confirmBtnRef = useRef<HTMLButtonElement>(null);
-  const lastFocusRef = useRef<HTMLElement | null>(null);
-
-  // Store the last focused element before opening and restore on close
-  useEffect(() => {
-    lastFocusRef.current = document.activeElement as HTMLElement;
-    requestAnimationFrame(() => {
-      titleRef.current?.focus();
-    });
-    return () => {
-      requestAnimationFrame(() => {
-        lastFocusRef.current?.focus();
-      });
-    };
-  }, []);
-
-  // Trap focus within the modal
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Escape" && !submitting) {
-      onClose();
-      return;
-    }
-    if (e.key !== "Tab") return;
-
-    const overlay = overlayRef.current;
-    if (!overlay) return;
-
-    const focusable = overlay.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable.length === 0) return;
-
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-
-    if (e.shiftKey) {
-      if (document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      }
-    } else {
-      if (document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-  }, [submitting, onClose]);
 
   const handlePaySubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -531,11 +654,11 @@ export function PayModal({ draft, onClose, onConfirm, balance }: PayModalProps) 
     }
 
     setSubmitting(true);
-    const success = await onConfirm({ ...draft, amount }, amount);
-    setSubmitting(false);
-
-    if (success) {
-      onClose();
+    try {
+      const success = await onConfirm({ ...draft, amount }, amount);
+      if (success) onClose();
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -545,18 +668,15 @@ export function PayModal({ draft, onClose, onConfirm, balance }: PayModalProps) 
   const remaining = balanceNum !== null ? balanceNum - amountNum : null;
   const wouldDeficit = remaining !== null && remaining < 1; // 1 XLM reserve
 
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      ref={overlayRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pay-modal-title"
-      onKeyDown={handleKeyDown}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+  return (
+    <Modal
+      onClose={onClose}
+      labelledBy="pay-modal-title"
+      closeOnEscape={!submitting}
+      initialFocusRef={titleRef}
+      overlayClassName="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      panelClassName="w-full max-w-md rounded-2xl bg-white dark:bg-[#121b19] p-6 shadow-xl border border-slate-200/90 dark:border-slate-800 max-h-[calc(100vh-2rem)] overflow-y-auto animate-in zoom-in-95 duration-150"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#121b19] p-6 shadow-xl border border-slate-200/90 dark:border-slate-800 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60">
@@ -684,7 +804,6 @@ export function PayModal({ draft, onClose, onConfirm, balance }: PayModalProps) 
               Cancel
             </Button>
             <Button
-              ref={confirmBtnRef}
               type="submit"
               variant="primary"
               loading={submitting}
@@ -694,8 +813,6 @@ export function PayModal({ draft, onClose, onConfirm, balance }: PayModalProps) 
             </Button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

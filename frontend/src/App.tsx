@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { Button, PayModal, shortKey } from "./components/ui";
+import { Button, Modal, PayModal, shortKey } from "./components/ui";
 import { ToastViewport } from "./components/ToastViewport";
 import { TopBar } from "./components/layout/TopBar";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -15,7 +15,7 @@ import { useToast } from "./hooks/useToast";
 import { useTheme } from "./hooks/useTheme";
 import { useSidebar } from "./hooks/useSidebar";
 import { sendXlm, fundWithFriendbot } from "./lib/stellar";
-import { setWalletKitTheme } from "./lib/wallet";
+import { checkTestnet, setWalletKitTheme } from "./lib/wallet";
 import { EXPLORER_TX } from "./config";
 import type { Employee, PaymentDraft, PaymentReceipt } from "./types";
 import { LogOut } from "lucide-react";
@@ -195,10 +195,19 @@ function App() {
   const handleConnect = async () => {
     try {
       await wallet.connect(theme);
-      push({
-        kind: "success",
-        message: "Connected wallet successfully!",
-      });
+      // Honest feedback: connecting on the wrong network is not a clean success.
+      const network = await checkTestnet();
+      if (network === "TESTNET") {
+        push({ kind: "success", message: "Connected wallet successfully!" });
+      } else {
+        push({
+          kind: "error",
+          message:
+            network === "WRONG"
+              ? "Wallet connected, but it's on the wrong network. Switch to Stellar Testnet before making payments."
+              : "Wallet connected, but the network could not be verified. Ensure your wallet is on Stellar Testnet.",
+        });
+      }
     } catch (e) {
       if (e instanceof Error && e.message.includes("cancelled")) return;
       push({
@@ -363,51 +372,46 @@ function App() {
         />
       )}
 
-      {/* Disconnect confirmation dialog */}
+      {/* Disconnect confirmation dialog — shared accessible modal */}
       {confirmDisconnect && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          onClick={handleDisconnectCancel}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Confirm disconnect wallet"
+        <Modal
+          onClose={handleDisconnectCancel}
+          closeOnBackdrop
+          ariaLabel="Confirm disconnect wallet"
+          overlayClassName="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          panelClassName="mx-4 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-[#121b19]"
         >
-          <div
-            className="mx-4 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-[#121b19]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 dark:border-rose-800/60 dark:bg-rose-950/60 dark:text-rose-400">
-                <LogOut className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Disconnect wallet
-                </h3>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Are you sure you want to disconnect your wallet?
-                </p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 dark:border-rose-800/60 dark:bg-rose-950/60 dark:text-rose-400">
+              <LogOut className="h-5 w-5" />
             </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <Button
-                onClick={handleDisconnectCancel}
-                variant="outline"
-                className="flex-1 sm:flex-none"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDisconnectConfirm}
-                variant="danger"
-                className="flex-1 sm:flex-none"
-              >
-                Disconnect
-              </Button>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Disconnect wallet
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Are you sure you want to disconnect your wallet?
+              </p>
             </div>
           </div>
-        </div>
+
+          <div className="mt-6 flex items-center justify-end gap-3">
+            <Button
+              onClick={handleDisconnectCancel}
+              variant="outline"
+              className="flex-1 sm:flex-none"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDisconnectConfirm}
+              variant="danger"
+              className="flex-1 sm:flex-none"
+            >
+              Disconnect
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {/* Project onboarding overlay (first-run or via About button) */}

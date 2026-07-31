@@ -37,18 +37,15 @@ export function DirectXlmForm({
 
   // Apply prefill values (from "Pay Salary" action)
   useEffect(() => {
-    if (prefill) {
-      setAddress(prefill.address);
-      if (prefill.amount) setAmount(prefill.amount);
-      if (prefill.name) setMemo(`Salary: ${prefill.name}`);
-      setSelectedEmployee("");
-      setFormError(null);
-      // Focus the amount field since address is filled
-      setTimeout(() => {
-        const amtInput = document.getElementById("dxlm-amount");
-        amtInput?.focus();
-      }, 100);
-    }
+    if (!prefill) return;
+    setAddress(prefill.address);
+    if (prefill.amount) setAmount(prefill.amount);
+    if (prefill.name) setMemo(`Salary: ${prefill.name}`);
+    setSelectedEmployee("");
+    setFormError(null);
+    // The amount input is always mounted (the form stays mounted while hidden),
+    // so focus it directly once the values land — no timer race.
+    document.getElementById("dxlm-amount")?.focus();
   }, [prefill]);
 
   // Handle roster picker change — prefills form fields only
