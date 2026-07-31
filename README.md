@@ -2,7 +2,9 @@
 
 **StellarPay** is a decentralized payroll and salary distribution platform built on **Stellar Testnet** with a **Soroban smart contract**. It allows employers to manage employee rosters, execute direct or bulk XLM salary payments, and track payroll cycles — all from a mobile-responsive web app with non-custodial wallet signing.
 
-> **Quick Stats:** 8 wallets supported | 67 frontend tests | 10 Soroban event types | 3 custom error classes | CI/CD pipeline
+> 🔗 **Live Demo:** [stellar-pay-phi.vercel.app](https://stellar-pay-phi.vercel.app/)
+
+> **Quick Stats:** 8 wallets supported | 94+ frontend tests | 23 contract tests | 10 Soroban event types | 3 custom error classes | CI/CD pipeline
 
 ### Tech Stack
 
@@ -354,6 +356,33 @@ Click "Connect Wallet" — the StellarWalletsKit modal should show all 8 support
 
 ---
 
+## Transaction Proof
+
+| Field | Value |
+|---|---|
+| **Contract** | `CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV` |
+| **Network** | Stellar Testnet |
+| **Explorer** | [View Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV) |
+
+> After interacting with the contract on Testnet, transaction hashes can be verified on [Stellar Expert](https://stellar.expert/explorer/testnet).
+
+---
+
+## CI/CD Pipeline
+
+StellarPay uses **GitHub Actions** for continuous integration with two parallel jobs:
+
+| Job | Steps |
+|---|---|
+| **Build & Test Soroban Contract** | Install Rust + wasm32 target → `cargo test --verbose` → Build WASM (`wasm32v1-none --release`) |
+| **Lint, Test & Build Frontend** | Setup Bun → `bun install` → `bun run lint` (oxlint) → `bun run test` (Vitest, 94+ tests) → `bun run build` (TypeScript + Vite) |
+
+Triggers on every push and pull request to `main`.
+
+[View CI Pipeline on GitHub Actions](https://github.com/itachix99/StellarPay/actions)
+
+---
+
 ## Documentation
 
 - [README.md](README.md) — Level 1 & Level 2 requirements documentation
@@ -361,7 +390,9 @@ Click "Connect Wallet" — the StellarWalletsKit modal should show all 8 support
 
 ## Useful Links
 
+- 🔗 [Live Demo](https://stellar-pay-phi.vercel.app/)
 - [Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CASTP46VFFVDQ77FUIDTTTXBBGYIX4YZTANUIVYGGVDXC67UL7VEVLTV)
+- [GitHub Actions CI](https://github.com/itachix99/StellarPay/actions)
 - [Stellar Testnet](https://stellar.org/developers/tools)
 - [Freighter Wallet](https://www.freighter.app/)
 - [Soroban Documentation](https://soroban.stellar.org/)
